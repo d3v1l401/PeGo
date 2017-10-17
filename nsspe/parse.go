@@ -21,6 +21,7 @@ type Parsed struct {
 	PeFile *PE
 	data   []byte
 	Path   string
+	signDb *SignatureDatabase
 }
 
 func (p *Parsed) decryptRich(buffer []byte) []byte {
@@ -297,6 +298,26 @@ func (p *Parsed) parseEP(reader *bytes.Reader) error {
 	ssd := spamsum.HashBytes(data[0:endoffunctionindex])
 	p.PeFile.EPDeep = ssd.String()
 
+	if p.signDb != nil {
+		signs := p.signDb.MatchAll(data, RECOMMENDED_DEEPNESS, 0)
+		if len(signs) > 0 {
+			susp := false
+			for _, s := range p.PeFile.Sections {
+				if s.Entropy > 7.0 {
+					susp = true
+					break
+				}
+			}
+			Packed := &PackerInfo{
+				PackerName:   p.signDb.Entries[signs[0]].Name,
+				EPOnly:       p.signDb.Entries[signs[0]].EntryPointOnly,
+				HeavySuspect: susp,
+			}
+			p.PeFile.Packer = Packed
+		}
+
+	}
+
 	return nil
 }
 
@@ -355,6 +376,9 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 								} else {
 									ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
 									name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+									if ordinal == 0 && len(name) < 1 {
+										break
+									}
 								}
 							} else {
 								addr = p.bytesrva(int(rva), 8)
@@ -400,58 +424,58 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 				}
 			case IMAGE_DIRECTORY_ENTRY_RESOURCE:
 				// not important, but some droppers store an encrypted payload version in resources, might be usefull
+				/*
+					sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
+					if sect != nil {
+						pointer := PtrToRVA(uint64(directory.VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
+						p.setPointer(reader, uint64(pointer))
+						var resourceHeader ResourceDirectory
 
-				sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
-				if sect != nil {
-					pointer := PtrToRVA(uint64(directory.VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
-					p.setPointer(reader, uint64(pointer))
-					var resourceHeader ResourceDirectory
-
-					if err := binary.Read(reader, binary.LittleEndian, &resourceHeader); err != nil {
-						return err
-					}
-
-					p.setPointer(reader, uint64(pointer+0x10))
-
-					for index := 0; index < int(resourceHeader.NumberOfNamedEntries+resourceHeader.NumberOfIdEntries); index++ {
-						var resourceDirEntry ResourceDirectoryEntry
-						if err := binary.Read(reader, binary.LittleEndian, &resourceDirEntry); err != nil {
+						if err := binary.Read(reader, binary.LittleEndian, &resourceHeader); err != nil {
 							return err
 						}
 
-						fmt.Printf("Dir ID %d @ %08X\n", resourceDirEntry.Name, resourceDirEntry.OffsetToData)
+						p.setPointer(reader, uint64(pointer+0x10))
 
-						p.PeFile.DirectoryEntries = append(p.PeFile.DirectoryEntries, resourceDirEntry)
-						p.setPointer(reader, uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
-						fmt.Printf("%08X\n", uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
+						for index := 0; index < int(resourceHeader.NumberOfNamedEntries+resourceHeader.NumberOfIdEntries); index++ {
+							var resourceDirEntry ResourceDirectoryEntry
+							if err := binary.Read(reader, binary.LittleEndian, &resourceDirEntry); err != nil {
+								return err
+							}
 
-					}
+							//fmt.Printf("Dir ID %d @ %08X\n", resourceDirEntry.Name, resourceDirEntry.OffsetToData)
 
-					for _, c := range p.PeFile.DirectoryEntries {
-						var resourceData ResourceDataEntry
-						isNamed := (c.Name & 0x80000000) >> 31
-						if isNamed != 0 {
-							c.Name = (c.Name & 0x00FFFFFF)
-							name := readZeroTerminatedString(p.bytesrva(int(c.Name), 0))
-							fmt.Printf("> %s\n", name)
-						} else {
-							c.Name = (c.Name & 0x00FFFFFF)
+							p.PeFile.DirectoryEntries = append(p.PeFile.DirectoryEntries, resourceDirEntry)
+							p.setPointer(reader, uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
+							//fmt.Printf("%08X\n", uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
+
 						}
 
-						fmt.Printf("> %d - %08X\n", c.Name, GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData)))
+						for _, c := range p.PeFile.DirectoryEntries {
+							var resourceData ResourceDataEntry
+							isNamed := (c.Name & 0x80000000) >> 31
+							if isNamed != 0 {
+								c.Name = (c.Name & 0x00FFFFFF)
+								//name := readZeroTerminatedString(p.bytesrva(int(c.Name), 0))
+								//fmt.Printf("> %s\n", name)
+							} else {
+								c.Name = (c.Name & 0x00FFFFFF)
+							}
 
-						p.setPointer(reader, uint64(GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData))))
-						if err := binary.Read(reader, binary.LittleEndian, &resourceData); err != nil {
-							return err
+							//fmt.Printf("> %d - %08X\n", c.Name, GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData)))
+
+							p.setPointer(reader, uint64(GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData))))
+							if err := binary.Read(reader, binary.LittleEndian, &resourceData); err != nil {
+								return err
+							}
+
+							//fmt.Printf("Size Dir: %d %08X\n", resourceData.Size, uint64(GibMeOffset(p.PeFile.Sections, uint64(resourceData.OffsetToData))))
 						}
-
-						fmt.Printf("Size Dir: %d %08X\n", resourceData.Size, uint64(GibMeOffset(p.PeFile.Sections, uint64(resourceData.OffsetToData))))
+						entry = resourceHeader
+					} else {
+						fmt.Printf("Resource directory not pointing to anywhere, typical packed behaviour\n")
 					}
-
-					entry = resourceHeader
-				} else {
-					fmt.Printf("Resource directory not pointing to anywhere, typical packed behaviour\n")
-				}
+				*/
 
 			case IMAGE_DIRECTORY_ENTRY_EXCEPTION:
 				// not important, some PE perform hooking trough PAGE_GUARD exception calling, rarely in
@@ -653,9 +677,28 @@ func (p *Parsed) adjustValues() error {
 	return nil
 }
 
-func (p *Parsed) Parse(buffer []byte) error {
+func (p *Parsed) loadSignatures(types string, dbpath string) error {
+	if strings.Compare(SCANTYPE_OFF, types) == 0 {
+		p.signDb = nil
+	} else if strings.Compare(SCANTYPE_FULL, types) == 0 || strings.Compare(SCANTYPE_EPONLY, types) == 0 {
+		db, err := LoadSignatures(dbpath)
+		if err != nil {
+			return err
+		} else {
+			p.signDb = db
+		}
+	}
+	return nil
+}
+
+func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 	if len(p.Path) < 1 {
 		return errors.New("No path given")
+	}
+
+	err := p.loadSignatures(scantype, dbpath)
+	if err != nil {
+		return err
 	}
 
 	p.data = buffer
@@ -708,12 +751,24 @@ func (p *Parsed) Parse(buffer []byte) error {
 		}
 
 		//p.PeFile.AuthHash = p.getHash(reader)
-		p.parseEP(reader)
+		err = p.parseEP(reader)
+		if checkError(err) {
+			return err
+		}
 
 		return nil // Success
 	}
 
 	return errors.New("No buffer parsed.")
+}
+
+func (p *Parsed) LoadWithSignatures(path, scantype, dbfile string) error {
+	buffer, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	p.Path = path
+	return p.Parse(buffer, scantype, dbfile)
 }
 
 func (p *Parsed) Load(path string) error {
@@ -722,5 +777,5 @@ func (p *Parsed) Load(path string) error {
 		return err
 	}
 	p.Path = path
-	return p.Parse(buffer)
+	return p.Parse(buffer, SCANTYPE_OFF, "")
 }

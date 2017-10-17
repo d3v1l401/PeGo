@@ -38,6 +38,12 @@ type COFFCharacteristics struct {
 	ReservedByteOrderHigh      bool `json:"-"`
 }
 
+type PackerInfo struct {
+	PackerName   string
+	EPOnly       bool
+	HeavySuspect bool
+}
+
 type PE struct {
 	FileAlignment uint32 `json:"-"`
 
@@ -66,6 +72,7 @@ type PE struct {
 
 	Indicators *DllSecCharacteristics
 	ImpHash    string `json:"-"`
+	Packer     *PackerInfo
 }
 
 type DosHeader struct {

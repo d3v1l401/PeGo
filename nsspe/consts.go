@@ -5,6 +5,12 @@ import (
 )
 
 const (
+	SCANTYPE_OFF    = "off"
+	SCANTYPE_FULL   = "full"
+	SCANTYPE_EPONLY = "eponly"
+)
+
+const (
 	EPSCAN_MAX_SIZE = 300
 )
 
