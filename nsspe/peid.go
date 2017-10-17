@@ -100,7 +100,7 @@ func (s *SignatureDatabase) scan(buffer []byte, mask string) uint {
 	return 0
 }
 
-func (s *SignatureDatabase) MatchAll(buffer []byte, deepness int, maxTrials int) []int {
+func (s *SignatureDatabase) MatchAll(buffer []byte, deepness int, maxTrials int, eponly bool) []int {
 	var matches []int
 	var deep int
 	var trials int
@@ -112,16 +112,18 @@ func (s *SignatureDatabase) MatchAll(buffer []byte, deepness int, maxTrials int)
 	}
 
 	for id, sign := range s.Entries {
-		trials++
-		if (s.scan(buffer, sign.Signature)) != 0 {
-			matches = append(matches, id)
-			deep++
-			if deep == deepness {
+		if sign.EntryPointOnly == eponly {
+			trials++
+			if (s.scan(buffer, sign.Signature)) != 0 {
+				matches = append(matches, id)
+				deep++
+				if deep == deepness {
+					break
+				}
+			}
+			if trials == maxTrials {
 				break
 			}
-		}
-		if trials == maxTrials {
-			break
 		}
 	}
 

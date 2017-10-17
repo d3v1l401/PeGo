@@ -44,6 +44,10 @@ type PackerInfo struct {
 	HeavySuspect bool
 }
 
+type Signatures struct {
+	Signature []string
+}
+
 type PE struct {
 	FileAlignment uint32 `json:"-"`
 
@@ -70,9 +74,10 @@ type PE struct {
 	InternalName string
 	OriginalName string
 
-	Indicators *DllSecCharacteristics
-	ImpHash    string `json:"-"`
-	Packer     *PackerInfo
+	Indicators   *DllSecCharacteristics
+	ImpHash      string `json:"-"`
+	Packer       *PackerInfo
+	Miscellanous *Signatures
 }
 
 type DosHeader struct {

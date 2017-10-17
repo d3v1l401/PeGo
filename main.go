@@ -16,7 +16,7 @@ func main() {
 	var scanType string
 	flag.StringVar(&path, "path", "C:/Windows/System32", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
-	flag.StringVar(&scanType, "signature", "full", "no, full or eponly signature scanning enable.")
+	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")
 
 	flag.Parse()
 	/*

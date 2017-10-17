@@ -18,10 +18,11 @@ import (
 )
 
 type Parsed struct {
-	PeFile *PE
-	data   []byte
-	Path   string
-	signDb *SignatureDatabase
+	PeFile   *PE
+	data     []byte
+	Path     string
+	signDb   *SignatureDatabase
+	scantype string
 }
 
 func (p *Parsed) decryptRich(buffer []byte) []byte {
@@ -299,7 +300,7 @@ func (p *Parsed) parseEP(reader *bytes.Reader) error {
 	p.PeFile.EPDeep = ssd.String()
 
 	if p.signDb != nil {
-		signs := p.signDb.MatchAll(data, RECOMMENDED_DEEPNESS, 0)
+		signs := p.signDb.MatchAll(data, RECOMMENDED_DEEPNESS, 0, true)
 		if len(signs) > 0 {
 			susp := false
 			for _, s := range p.PeFile.Sections {
@@ -316,6 +317,15 @@ func (p *Parsed) parseEP(reader *bytes.Reader) error {
 			p.PeFile.Packer = Packed
 		}
 
+		if strings.Compare(SCANTYPE_FULL, p.scantype) == 0 {
+			noepsigns := p.signDb.MatchAll(p.data, RECOMMENDED_DEEPNESS, MAX_RECOMMENDED_SEARCH_SCANS, false)
+			if len(noepsigns) > 0 {
+				p.PeFile.Miscellanous = &Signatures{}
+				for y, _ := range noepsigns {
+					p.PeFile.Miscellanous.Signature = append(p.PeFile.Miscellanous.Signature, p.signDb.Entries[noepsigns[y]].Name)
+				}
+			}
+		}
 	}
 
 	return nil
@@ -697,6 +707,7 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 	}
 
 	err := p.loadSignatures(scantype, dbpath)
+	p.scantype = scantype
 	if err != nil {
 		return err
 	}
