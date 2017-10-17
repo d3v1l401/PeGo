@@ -64,4 +64,15 @@ func main() {
 	data, _ = json.Marshal(pe2)
 	ioutil.WriteFile("out64.json", data, 0644)
 
+	pe3 := &nsspe.Parsed{}
+	pe3.Path = "SlaveInject.exe"
+	buffer, _ = ioutil.ReadFile(pe3.Path)
+	err = pe3.Parse(buffer, scanType, signaturePath)
+	if err != nil {
+		fmt.Printf("Parsing %s produced an error: %s.\n", pe3.Path, err.Error())
+	} else {
+		fmt.Printf("Parsed %s successfully.\n", pe3.Path)
+	}
+	data, _ = json.Marshal(pe3)
+	ioutil.WriteFile("SlaveInject.json", data, 0644)
 }

@@ -253,14 +253,14 @@ func (p *Parsed) particularCases(reader *bytes.Reader) error {
 	if index != -1 {
 		p.PeFile.InternalName = readUTFString(rawBuff, uint64(index+len(rawPattern)+3), 0xFF)
 	} else {
-		fmt.Printf("Internal name not found.\n")
+		//fmt.Printf("Internal name not found.\n")
 	}
 	rawPattern2 := [...]byte{0x4F, 0x00, 0x72, 0x00, 0x69, 0x00, 0x67, 0x00, 0x69, 0x00, 0x6E, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x46, 0x00, 0x69, 0x00, 0x6C, 0x00, 0x65, 0x00, 0x6E, 0x00, 0x61, 0x00, 0x6D, 0x00, 0x65}
 	index = bytes.Index(rawBuff, rawPattern2[:])
 	if index != -1 {
 		p.PeFile.OriginalName = readUTFString(rawBuff, uint64(index+len(rawPattern2)+3), 0xFF)
 	} else {
-		fmt.Printf("Original File Name not found.\n")
+		//fmt.Printf("Original File Name not found.\n")
 	}
 
 	return nil
