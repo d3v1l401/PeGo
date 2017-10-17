@@ -1,2 +1,3 @@
 *.json
 debug
+*_out.exe
