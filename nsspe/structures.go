@@ -11,8 +11,8 @@ const (
 	SIZE_OF_OPT      = 120
 )
 
-var THIS_SIZE_OF_RICH int = 0
-var THIS_SIZE_OF_OPT int = 0
+var THIS_SIZE_OF_RICH uint = 0
+var THIS_SIZE_OF_OPT uint = 0
 
 type ImportEntry struct {
 	Ordinal uint

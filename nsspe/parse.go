@@ -26,7 +26,7 @@ type Parsed struct {
 }
 
 func (p *Parsed) decryptRich(buffer []byte) []byte {
-	if len(buffer) < THIS_SIZE_OF_RICH {
+	if uint(len(buffer)) < THIS_SIZE_OF_RICH {
 		return nil
 	}
 	buffOut := make([]byte, THIS_SIZE_OF_RICH)
@@ -73,8 +73,8 @@ func (p *Parsed) setPointer(handler *bytes.Reader, loc uint64) {
 func (p *Parsed) parseRich(reader *bytes.Reader) error {
 	p.setPointer(reader, SIZE_OF_DOSH+SIZE_OF_DOSI)
 
-	THIS_SIZE_OF_RICH = int((p.PeFile.DosHeader.E_lfanew) - uint32(SIZE_OF_DOSH+SIZE_OF_DOSI))
-	if THIS_SIZE_OF_RICH > MIN_SIZE_OF_RICH {
+	THIS_SIZE_OF_RICH = uint((p.PeFile.DosHeader.E_lfanew) - uint32(SIZE_OF_DOSH+SIZE_OF_DOSI))
+	if THIS_SIZE_OF_RICH > MIN_SIZE_OF_RICH && THIS_SIZE_OF_RICH < 0x200 {
 		buff := make([]byte, THIS_SIZE_OF_RICH)
 		if err := binary.Read(reader, binary.BigEndian, &buff); err != nil {
 			return err
@@ -93,7 +93,7 @@ func (p *Parsed) parseNT(reader *bytes.Reader) error {
 	p.setPointer(reader, uint64(p.PeFile.DosHeader.E_lfanew))
 
 	if p.PeFile.DosHeader.E_lfanew < SIZE_OF_DOSH+SIZE_OF_DOSI {
-		return errors.New("NT Header inside DOS Header, illegal.")
+		p.PeFile.Sabotages.AbnormalPE = true
 	}
 
 	if err := binary.Read(reader, binary.LittleEndian, &p.PeFile.NtHeaders); err != nil {
@@ -121,7 +121,7 @@ func (p *Parsed) parseCOFF(reader *bytes.Reader) error {
 	if p.PeFile.FileHeader.SizeOfOptionalHeader < SIZE_OF_OPT {
 		return errors.New("Optional header is smaller than minimum, abnormal or not supported.")
 	}
-	THIS_SIZE_OF_OPT = int(p.PeFile.FileHeader.SizeOfOptionalHeader)
+	THIS_SIZE_OF_OPT = uint(p.PeFile.FileHeader.SizeOfOptionalHeader)
 
 	if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 {
 		if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 {
@@ -647,7 +647,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 func (p *Parsed) getHash(reader *bytes.Reader) string {
 	distanceToChecksum := 0x40
-	offsetPreChecksum := int(SIZE_OF_DOSH + SIZE_OF_NTH + SIZE_OF_DOSI + THIS_SIZE_OF_RICH + SIZE_OF_COFFH + distanceToChecksum)
+	offsetPreChecksum := int(SIZE_OF_DOSH + SIZE_OF_NTH + SIZE_OF_DOSI + int(THIS_SIZE_OF_RICH) + SIZE_OF_COFFH + distanceToChecksum)
 	mappedSections := make(map[uint32]SectionHeader, p.PeFile.FileHeader.NumberOfSections)
 
 	sha256 := sha256.New()
