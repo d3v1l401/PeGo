@@ -26,6 +26,7 @@ type SabotageFlags struct {
 	AbnormalPE         bool
 	RecursiveIAT       bool
 	DirectoryEvasion   bool
+	AbnormalSectioning bool
 }
 
 type COFFCharacteristics struct {

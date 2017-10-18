@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"strings"
 
 	"./shannon"
@@ -23,6 +22,7 @@ type Parsed struct {
 	Path     string
 	signDb   *SignatureDatabase
 	scantype string
+	ordMap   map[string]lib
 }
 
 func (p *Parsed) decryptRich(buffer []byte) []byte {
@@ -101,7 +101,7 @@ func (p *Parsed) parseNT(reader *bytes.Reader) error {
 	}
 
 	if p.PeFile.NtHeaders.Signature != IMAGE_NT_SIGNATURE {
-		return errors.New("NT Header is not a PE file.")
+		return errors.New("NT Header is not an executable PE file.")
 	}
 
 	return nil
@@ -119,13 +119,13 @@ func (p *Parsed) parseCOFF(reader *bytes.Reader) error {
 	}
 
 	if p.PeFile.FileHeader.SizeOfOptionalHeader < SIZE_OF_OPT {
-		return errors.New("Optional header is smaller than minimum, abnormal or not supported.")
+		p.PeFile.Sabotages.AbnormalPE = true
 	}
 	THIS_SIZE_OF_OPT = uint(p.PeFile.FileHeader.SizeOfOptionalHeader)
 
 	if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 {
 		if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 {
-			return errors.New("PE file is not made for modern processors, abnormal or not supported.")
+			p.PeFile.Sabotages.AbnormalPE = true
 		}
 	}
 
@@ -149,7 +149,7 @@ func (p *Parsed) parseOPT(reader *bytes.Reader) error {
 			return err
 		}
 		if p.PeFile.OptionalHeader.Magic == OPTIONAL_HEADER_MAGIC_PE_PLUS && p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 {
-			return errors.New("Inconsistency between COFF header machine and Optional Header Magic.")
+			p.PeFile.Sabotages.AbnormalPE = true
 		}
 	} else { // 32bit
 		var opt32 OptionalHeader32
@@ -165,7 +165,7 @@ func (p *Parsed) parseOPT(reader *bytes.Reader) error {
 			return err
 		}
 		if p.PeFile.OptionalHeader.Magic == OPTIONAL_HEADER_MAGIC_PE && p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 {
-			return errors.New("Inconsistency between COFF header machine and Optional Header Magic.")
+			p.PeFile.Sabotages.AbnormalPE = true
 		}
 	}
 
@@ -175,7 +175,7 @@ func (p *Parsed) parseOPT(reader *bytes.Reader) error {
 }
 
 const (
-	MAX_SECTION_SIZE = 2147483648 // 2 Gbs
+	MAX_SECTION_SIZE = 0xFFFFFFFF
 )
 
 func (p *Parsed) parseSECT(reader *bytes.Reader) error {
@@ -198,7 +198,7 @@ func (p *Parsed) parseSECT(reader *bytes.Reader) error {
 
 	for x, section := range p.PeFile.Sections {
 		if section.SizeOfRawData > MAX_SECTION_SIZE {
-			fmt.Printf("Section %s size is more than 2 Gigabytes...\n", section.Name)
+			p.PeFile.Sabotages.AbnormalSectioning = true
 		} else {
 			data := make([]byte, section.SizeOfRawData)
 			p.setPointer(reader, uint64(section.PointerToRawData))
@@ -243,6 +243,19 @@ func readZeroTerminatedString(buff []byte) string {
 		}
 	}
 	return string(buff) // No zero termination found
+}
+
+func (p *Parsed) OrdinalResolver(path string) error {
+
+	if (p.ordMap != nil) && (len(p.ordMap) > 0) {
+		return nil
+	} else {
+		mappy, err := LoadResolveMaps(path)
+		p.ordMap = mappy
+		return err
+	}
+
+	return nil
 }
 
 func (p *Parsed) particularCases(reader *bytes.Reader) error {
@@ -350,6 +363,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 					// Should be coded
 				case IMAGE_DIRECTORY_ENTRY_IMPORT:
 					p.PeFile.ImportedAPI = make(map[string][]ImportEntry)
+					var lastOrd uint64 = 0
 
 					var imphashparts []string
 
@@ -376,33 +390,42 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							rva := impDec.OriginalFirstThunk
 
 							for {
-								var addr []byte
+								//var addr []byte
 								var oft uint64
 								var name string
 								var ordinal uint16
 								if !p.PeFile.isLargeAddress {
-									dontCashMeOutside := GibMeOffset(p.PeFile.Sections, uint64(rva))
-
-									if uint64(dontCashMeOutside) < uint64(directory.Size) && dontCashMeOutside >= 1 {
-										addr = p.bytesrva(int(rva), 4)
-										oft = uint64(binary.LittleEndian.Uint32(addr))
-										if oft&0x80000000 != 0 {
-											ordinal = uint16(oft & 0xFFFF)
-										} else {
-											ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
-											name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
-											if ordinal == 0 && len(name) < 1 {
-												break
-											}
-										}
-									} else {
-										p.PeFile.Sabotages.DirectoryEvasion = true
+									//dontCashMeOutside := GibMeOffset(p.PeFile.Sections, uint64(rva))
+									//maxCashOutside := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress+directory.Size))
+									if rva == 0 {
 										break
+									}
+									//addr = p.bytesrva(int(rva), 4)
+									oft = uint64(GibMeOffset(p.PeFile.Sections, uint64(rva)))
+									if oft&0x80000000 != 0 {
+										ordinal = uint16(oft & 0xFFFF)
+									} else {
+										if lastOrd == oft {
+											break
+										}
+										lastOrd = oft
+										fmt.Println(GibMeOffset(p.PeFile.Sections, oft))
+										res := p.bytesrva(int(oft), 2)
+										uintttt := binary.LittleEndian.Uint16(res)
+										fmt.Println(res, uintttt)
+										ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
+										name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+										if ordinal == 0 && len(name) < 1 {
+											break
+										}
 									}
 
 								} else {
-									addr = p.bytesrva(int(rva), 8)
-									oft = uint64(binary.LittleEndian.Uint64(addr))
+									if rva == 0 {
+										break
+									}
+									//addr = p.bytesrva(int(rva), 8)
+									oft = uint64(GibMeOffset(p.PeFile.Sections, uint64(rva)))
 									if oft&0x8000000000000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
@@ -425,6 +448,12 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									Ordinal: uint(ordinal),
 									Name:    name,
 								}
+								if len(name) < 1 && stuz.Ordinal > 0 && stuz.Ordinal < 1000 {
+									stuz.Name = p.resolveOrdinal(int(stuz.Ordinal), impdname)
+								} else {
+									break
+								}
+
 								if len(name) < 350 {
 									if len(p.PeFile.ImportedAPI[impdname]) < 500 {
 										p.PeFile.ImportedAPI[impdname] = append(p.PeFile.ImportedAPI[impdname], stuz)
@@ -434,15 +463,12 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									}
 
 								} else {
+									p.PeFile.Sabotages.HeavilyEncrypted = true
 									fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
 								}
 
-								if len(impdname) > 4 {
-									if len(name) > 1 {
-										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
-									} else if ordinal > 0 {
-										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strconv.Itoa(int(ordinal))))
-									}
+								if len(impdname) > 1 {
+									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
 								}
 
 							}

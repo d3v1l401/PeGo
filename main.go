@@ -11,12 +11,13 @@ import (
 	"./nsspe"
 )
 
-func processfile(filename string, scanType, signaturePath, outpath string) {
+func processfile(filename string, scanType, signaturePath, outpath, ordmap string) {
 	pe := &nsspe.Parsed{}
 	pe.Path = filename
 	buffer, _ := ioutil.ReadFile(pe.Path)
 
 	fmt.Printf("Parsing %s...\n", filename)
+	pe.OrdinalResolver(ordmap)
 	err := pe.Parse(buffer, scanType, signaturePath)
 	if err != nil {
 		fmt.Printf("Error processing %v: %v\n", filename, err)
@@ -36,21 +37,23 @@ func main() {
 	var signaturePath string
 	var scanType string
 	var outPath string
-	flag.StringVar(&filename, "file", ".\\samples\\VirusShare_0b5d7d8147e47e34361819f0c2282843", "Process this file")
+	var ordMap string
+	flag.StringVar(&filename, "file", "samples\\VirusShare_2d536fd73448a0d20dbbefeaf6e32af7", "Process this file")
 	flag.StringVar(&path, "path", "C:/Windows/System32", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")
 	flag.StringVar(&outPath, "outpath", "", "Output path for reports.")
+	flag.StringVar(&ordMap, "ordmap", "", "If ordinal mapping is present, specify path.")
 
 	flag.Parse()
 
 	if len(flag.Args()) > 0 {
 		for _, name := range flag.Args() {
-			processfile(name, scanType, signaturePath, outPath)
+			processfile(name, scanType, signaturePath, outPath, ordMap)
 		}
 	} else if filename != "" {
 		// Process a file
-		processfile(filename, scanType, signaturePath, outPath)
+		processfile(filename, scanType, signaturePath, outPath, ordMap)
 	} else {
 		// Process a folder
 		files, err := ioutil.ReadDir(path)
@@ -60,7 +63,7 @@ func main() {
 
 		for _, f := range files {
 			//			fmt.Println("Parsing " + f.Name())
-			processfile(filepath.Join(path, f.Name()), scanType, signaturePath, outPath)
+			processfile(filepath.Join(path, f.Name()), scanType, signaturePath, outPath, ordMap)
 		}
 	}
 	/*	pe := &nsspe.Parsed{}
