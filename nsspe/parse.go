@@ -721,10 +721,12 @@ func (p *Parsed) adjustValues() error {
 }
 
 func (p *Parsed) loadSignatures(types string, dbpath string) error {
-	if strings.Compare(SCANTYPE_OFF, types) == 0 {
-		p.signDb = nil
-	} else if strings.Compare(SCANTYPE_FULL, types) == 0 || strings.Compare(SCANTYPE_EPONLY, types) == 0 {
-		if p.signDb == nil { // Ugly
+	if p.signDb != nil {
+		return nil
+	} else {
+		if strings.Compare(SCANTYPE_OFF, types) == 0 {
+			p.signDb = nil
+		} else if strings.Compare(SCANTYPE_FULL, types) == 0 || strings.Compare(SCANTYPE_EPONLY, types) == 0 {
 			db, err := LoadSignatures(dbpath)
 			if err != nil {
 				return err
@@ -733,6 +735,7 @@ func (p *Parsed) loadSignatures(types string, dbpath string) error {
 			}
 		}
 	}
+
 	return nil
 }
 
