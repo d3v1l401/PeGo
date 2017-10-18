@@ -19,6 +19,15 @@ type ImportEntry struct {
 	Name    string
 }
 
+type SabotageFlags struct {
+	ScrambledAddresses bool
+	IncorrectSizes     bool
+	HeavilyEncrypted   bool
+	AbnormalPE         bool
+	RecursiveIAT       bool
+	DirectoryEvasion   bool
+}
+
 type COFFCharacteristics struct {
 	IsExecutable               bool
 	IsDLL                      bool
@@ -65,7 +74,7 @@ type PE struct {
 
 	ImportedAPI map[string][]ImportEntry
 
-	AuthInfo   AuthentInfo
+	AuthInfo   AuthentInfo `json:"-"`
 	AuthRes    bool
 	AuthHash   string
 	AuthInfoGo Authenticode
@@ -79,6 +88,8 @@ type PE struct {
 	ImpHash      string `json:"-"`
 	Packer       *PackerInfo
 	Miscellanous *Signatures
+
+	Sabotages SabotageFlags
 }
 
 type DosHeader struct {

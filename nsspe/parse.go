@@ -114,8 +114,8 @@ func (p *Parsed) parseCOFF(reader *bytes.Reader) error {
 		return err
 	}
 
-	if p.PeFile.FileHeader.NumberOfSections < 3 {
-		return errors.New("Minimum amount of sections not reached, file is abnormal.")
+	if p.PeFile.FileHeader.NumberOfSections < 2 {
+		p.PeFile.Sabotages.AbnormalPE = true
 	}
 
 	if p.PeFile.FileHeader.SizeOfOptionalHeader < SIZE_OF_OPT {
@@ -337,283 +337,307 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 	for v, directory := range p.PeFile.OptionalHeader.Directories {
 		if directory.VirtualAddress > 0 && directory.Size > 0 {
 
-			var entry interface{}
-			entry = directory // default import into DataDirectory index
+			if directory.Size < 1*1024*1024*1024 {
 
-			readDir++
-			p.setPointer(reader, uint64(directory.VirtualAddress))
+				var entry interface{}
+				entry = directory // default import into DataDirectory index
 
-			switch DirectoryEntryType(v) {
-			case IMAGE_DIRECTORY_ENTRY_EXPORT:
-				// Should be coded
-			case IMAGE_DIRECTORY_ENTRY_IMPORT:
-				p.PeFile.ImportedAPI = make(map[string][]ImportEntry)
+				readDir++
+				p.setPointer(reader, uint64(directory.VirtualAddress))
 
-				var imphashparts []string
+				switch DirectoryEntryType(v) {
+				case IMAGE_DIRECTORY_ENTRY_EXPORT:
+					// Should be coded
+				case IMAGE_DIRECTORY_ENTRY_IMPORT:
+					p.PeFile.ImportedAPI = make(map[string][]ImportEntry)
 
-				sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
-				if sect != nil {
-					pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress))
+					var imphashparts []string
 
-					//fmt.Printf("Import -> %s -> %08X\n", sect.Name, pointer)
-
-					p.setPointer(reader, uint64(pointer))
-
-					counter := directory.Size / uint32(binary.Size(ImportDescriptor{}))
-
-					for index := 1; index < int(counter); index++ {
-						var impDec ImportDescriptor
-
-						if err := binary.Read(reader, binary.LittleEndian, &impDec); err != nil {
-							return err
-						}
-
-						impdname := readZeroTerminatedString(p.bytes(int(GibMeOffset(p.PeFile.Sections, uint64(impDec.Name))), 0))
-						//fmt.Printf("Import Descriptor (%08X) -> IAT %08X [copy %08X] (%v)\n", impDec.Name, impDec.OriginalFirstThunk, impDec.FirstThunk, name)
-
-						rva := impDec.OriginalFirstThunk
-
-						for {
-							var addr []byte
-							var oft uint64
-							var name string
-							var ordinal uint16
-							if !p.PeFile.isLargeAddress {
-								addr = p.bytesrva(int(rva), 4)
-								oft = uint64(binary.LittleEndian.Uint32(addr))
-								if oft&0x80000000 != 0 {
-									ordinal = uint16(oft & 0xFFFF)
-								} else {
-									ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
-									name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
-									if ordinal == 0 && len(name) < 1 {
-										break
-									}
-								}
-							} else {
-								addr = p.bytesrva(int(rva), 8)
-								oft = uint64(binary.LittleEndian.Uint64(addr))
-								if oft&0x8000000000000000 != 0 {
-									ordinal = uint16(oft & 0xFFFF)
-								} else {
-									ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
-									name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
-								}
-							}
-							if oft == 0 {
-								break
-							}
-
-							//fmt.Printf("Routine at %08X %d %v ...\n", oft, ordinal, name)
-							if !p.PeFile.isLargeAddress {
-								rva += 4
-							} else {
-								rva += 8
-							}
-
-							stuz := ImportEntry{
-								Ordinal: uint(ordinal),
-								Name:    name,
-							}
-							p.PeFile.ImportedAPI[impdname] = append(p.PeFile.ImportedAPI[impdname], stuz)
-
-							if len(impdname) > 4 {
-								if len(name) > 1 {
-									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
-								} else if ordinal > 0 {
-									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strconv.Itoa(int(ordinal))))
-								}
-							}
-
-						}
-					}
-					//h := md5.New()
-					//h.Write([]byte(strings.Join(imphashparts, ",")))
-					//p.PeFile.ImpHash = string(hex.EncodeToString(h.Sum(nil)))
-					p.PeFile.ImpHash = strings.Join(imphashparts, ",")
-				}
-			case IMAGE_DIRECTORY_ENTRY_RESOURCE:
-				// not important, but some droppers store an encrypted payload version in resources, might be usefull
-				/*
 					sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
 					if sect != nil {
-						pointer := PtrToRVA(uint64(directory.VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
+						pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress))
+
+						//fmt.Printf("Import -> %s -> %08X\n", sect.Name, pointer)
+
 						p.setPointer(reader, uint64(pointer))
-						var resourceHeader ResourceDirectory
 
-						if err := binary.Read(reader, binary.LittleEndian, &resourceHeader); err != nil {
+						counter := directory.Size / uint32(binary.Size(ImportDescriptor{}))
+
+						for index := 1; index < int(counter); index++ {
+							var impDec ImportDescriptor
+
+							if err := binary.Read(reader, binary.LittleEndian, &impDec); err != nil {
+								return err
+							}
+
+							impdname := readZeroTerminatedString(p.bytes(int(GibMeOffset(p.PeFile.Sections, uint64(impDec.Name))), 0))
+							//fmt.Printf("Import Descriptor (%08X) -> IAT %08X [copy %08X] (%v)\n", impDec.Name, impDec.OriginalFirstThunk, impDec.FirstThunk, name)
+
+							rva := impDec.OriginalFirstThunk
+
+							for {
+								var addr []byte
+								var oft uint64
+								var name string
+								var ordinal uint16
+								if !p.PeFile.isLargeAddress {
+									dontCashMeOutside := GibMeOffset(p.PeFile.Sections, uint64(rva))
+
+									if uint64(dontCashMeOutside) < uint64(directory.Size) && dontCashMeOutside >= 1 {
+										addr = p.bytesrva(int(rva), 4)
+										oft = uint64(binary.LittleEndian.Uint32(addr))
+										if oft&0x80000000 != 0 {
+											ordinal = uint16(oft & 0xFFFF)
+										} else {
+											ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
+											name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+											if ordinal == 0 && len(name) < 1 {
+												break
+											}
+										}
+									} else {
+										p.PeFile.Sabotages.DirectoryEvasion = true
+										break
+									}
+
+								} else {
+									addr = p.bytesrva(int(rva), 8)
+									oft = uint64(binary.LittleEndian.Uint64(addr))
+									if oft&0x8000000000000000 != 0 {
+										ordinal = uint16(oft & 0xFFFF)
+									} else {
+										ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
+										name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+									}
+								}
+								if oft == 0 {
+									break
+								}
+
+								//fmt.Printf("Routine at %08X %d %v ...\n", oft, ordinal, name)
+								if !p.PeFile.isLargeAddress {
+									rva += 4
+								} else {
+									rva += 8
+								}
+
+								stuz := ImportEntry{
+									Ordinal: uint(ordinal),
+									Name:    name,
+								}
+								if len(name) < 350 {
+									if len(p.PeFile.ImportedAPI[impdname]) < 500 {
+										p.PeFile.ImportedAPI[impdname] = append(p.PeFile.ImportedAPI[impdname], stuz)
+									} else {
+										p.PeFile.Sabotages.RecursiveIAT = true
+										break
+									}
+
+								} else {
+									fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
+								}
+
+								if len(impdname) > 4 {
+									if len(name) > 1 {
+										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
+									} else if ordinal > 0 {
+										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strconv.Itoa(int(ordinal))))
+									}
+								}
+
+							}
+						}
+						//h := md5.New()
+						//h.Write([]byte(strings.Join(imphashparts, ",")))
+						//p.PeFile.ImpHash = string(hex.EncodeToString(h.Sum(nil)))
+						p.PeFile.ImpHash = strings.Join(imphashparts, ",")
+					}
+				case IMAGE_DIRECTORY_ENTRY_RESOURCE:
+					// not important, but some droppers store an encrypted payload version in resources, might be usefull
+					/*
+						sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
+						if sect != nil {
+							pointer := PtrToRVA(uint64(directory.VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
+							p.setPointer(reader, uint64(pointer))
+							var resourceHeader ResourceDirectory
+
+							if err := binary.Read(reader, binary.LittleEndian, &resourceHeader); err != nil {
+								return err
+							}
+
+							p.setPointer(reader, uint64(pointer+0x10))
+
+							for index := 0; index < int(resourceHeader.NumberOfNamedEntries+resourceHeader.NumberOfIdEntries); index++ {
+								var resourceDirEntry ResourceDirectoryEntry
+								if err := binary.Read(reader, binary.LittleEndian, &resourceDirEntry); err != nil {
+									return err
+								}
+
+								//fmt.Printf("Dir ID %d @ %08X\n", resourceDirEntry.Name, resourceDirEntry.OffsetToData)
+
+								p.PeFile.DirectoryEntries = append(p.PeFile.DirectoryEntries, resourceDirEntry)
+								p.setPointer(reader, uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
+								//fmt.Printf("%08X\n", uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
+
+							}
+
+							for _, c := range p.PeFile.DirectoryEntries {
+								var resourceData ResourceDataEntry
+								isNamed := (c.Name & 0x80000000) >> 31
+								if isNamed != 0 {
+									c.Name = (c.Name & 0x00FFFFFF)
+									//name := readZeroTerminatedString(p.bytesrva(int(c.Name), 0))
+									//fmt.Printf("> %s\n", name)
+								} else {
+									c.Name = (c.Name & 0x00FFFFFF)
+								}
+
+								//fmt.Printf("> %d - %08X\n", c.Name, GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData)))
+
+								p.setPointer(reader, uint64(GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData))))
+								if err := binary.Read(reader, binary.LittleEndian, &resourceData); err != nil {
+									return err
+								}
+
+								//fmt.Printf("Size Dir: %d %08X\n", resourceData.Size, uint64(GibMeOffset(p.PeFile.Sections, uint64(resourceData.OffsetToData))))
+							}
+							entry = resourceHeader
+						} else {
+							fmt.Printf("Resource directory not pointing to anywhere, typical packed behaviour\n")
+						}
+					*/
+
+				case IMAGE_DIRECTORY_ENTRY_EXCEPTION:
+					// not important, some PE perform hooking trough PAGE_GUARD exception calling, rarely in
+					// the hacking scene.
+
+					sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
+					if sect != nil {
+						pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress)) //PtrToRVA(uint64(p.PeFile.OptionalHeader64.Directories[v].VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
+						p.setPointer(reader, uint64(pointer))
+
+						// not going deeper, for now.
+					}
+				case IMAGE_DIRECTORY_ENTRY_SECURITY:
+					headerInfo := make([]byte, SIZE_WIN_CERTIFICATE_HDR)
+
+					p.setPointer(reader, uint64(directory.VirtualAddress))
+					red, err := reader.Read(headerInfo)
+					if err != nil {
+						return err
+					} else if red != SIZE_WIN_CERTIFICATE_HDR {
+						return errors.New("Didn't read 8 bytes during security directory header reading, something's wrong.")
+					}
+
+					readeri := bytes.NewReader(headerInfo)
+					binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.Length)
+					binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.Revision)
+					binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.CerificateType)
+
+					if p.PeFile.AuthInfo.Certificate.CerificateType == WIN_CERT_TYPE_PKCS_SIGNED_DATA || p.PeFile.AuthInfo.Certificate.CerificateType == WIN_CERT_TYPE_X509 {
+						if p.PeFile.AuthInfo.Certificate.Revision == WIN_CERT_REVISION_1_0 || p.PeFile.AuthInfo.Certificate.Revision == WIN_CERT_REVISION_2_0 {
+							p.PeFile.AuthInfo.Certificate.Certificate = make([]byte, directory.Size-SIZE_WIN_CERTIFICATE_HDR)
+
+							p.setPointer(reader, uint64(directory.VirtualAddress+SIZE_WIN_CERTIFICATE_HDR))
+
+							red, err := reader.Read(p.PeFile.AuthInfo.Certificate.Certificate)
+
+							if err != nil {
+								return err
+							} else if uint64(red) != uint64(p.PeFile.AuthInfo.Certificate.Length-SIZE_WIN_CERTIFICATE_HDR) {
+								return errors.New("Didn't read real length of certificate, something's wrong.")
+							}
+
+							p.PeFile.AuthInfo.Path = p.Path
+							//p.PeFile.AuthRes = p.PeFile.AuthInfo.Validate()
+							//p.PeFile.AuthInfo.DeptInfo = *p.PeFile.AuthInfo.GetInDeptInfo()
+							au := Authenticode{}
+							au.Initialize(0, 0, int(p.PeFile.AuthInfo.Certificate.RealLength), p.PeFile.AuthInfo.Certificate.Certificate)
+							if !au.Parse() {
+								fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
+							}
+							p.PeFile.AuthInfoGo = au
+							p.PeFile.AuthInfo.Certificate.Certificate = nil
+						}
+					}
+
+				case IMAGE_DIRECTORY_ENTRY_BASERELOC:
+					// useless for us
+				case IMAGE_DIRECTORY_ENTRY_DEBUG:
+					// might contain usefull info on compilation of pe
+					// Raw data of entry vary from compiler to compiler.
+					sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
+					if sect != nil {
+						pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress)) //PtrToRVA(uint64(p.PeFile.OptionalHeader64.Directories[v].VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
+						p.setPointer(reader, uint64(pointer))
+						var debugDir DebugDirectory
+						var rsdsEntry RSDSEntry
+
+						//fmt.Printf("Debug -> %s -> %08X\n", string(sect.Name[:]), pointer)
+						if err := binary.Read(reader, binary.LittleEndian, &debugDir); err != nil {
 							return err
 						}
 
-						p.setPointer(reader, uint64(pointer+0x10))
-
-						for index := 0; index < int(resourceHeader.NumberOfNamedEntries+resourceHeader.NumberOfIdEntries); index++ {
-							var resourceDirEntry ResourceDirectoryEntry
-							if err := binary.Read(reader, binary.LittleEndian, &resourceDirEntry); err != nil {
+						p.setPointer(reader, uint64(debugDir.PointerToRawData)+24)
+						var pdbStringSize int = 0
+						for {
+							var btrPlaceHolder byte
+							if err := binary.Read(reader, binary.LittleEndian, &btrPlaceHolder); err != nil {
 								return err
 							}
+							pdbStringSize++
+							if btrPlaceHolder == 0x00 {
+								break
+							}
+						}
+						rsdsEntry.Name = make([]byte, pdbStringSize)
 
-							//fmt.Printf("Dir ID %d @ %08X\n", resourceDirEntry.Name, resourceDirEntry.OffsetToData)
-
-							p.PeFile.DirectoryEntries = append(p.PeFile.DirectoryEntries, resourceDirEntry)
-							p.setPointer(reader, uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
-							//fmt.Printf("%08X\n", uint64(pointer+0x10+int64(binary.Size(ResourceDirectoryEntry{})*index)))
-
+						p.setPointer(reader, uint64(debugDir.PointerToRawData))
+						if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Magic); err != nil {
+							return err
+						}
+						if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Hash); err != nil {
+							return err
+						}
+						if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.PDBFiles); err != nil {
+							return err
+						}
+						if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Name); err != nil {
+							return err
 						}
 
-						for _, c := range p.PeFile.DirectoryEntries {
-							var resourceData ResourceDataEntry
-							isNamed := (c.Name & 0x80000000) >> 31
-							if isNamed != 0 {
-								c.Name = (c.Name & 0x00FFFFFF)
-								//name := readZeroTerminatedString(p.bytesrva(int(c.Name), 0))
-								//fmt.Printf("> %s\n", name)
-							} else {
-								c.Name = (c.Name & 0x00FFFFFF)
-							}
-
-							//fmt.Printf("> %d - %08X\n", c.Name, GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData)))
-
-							p.setPointer(reader, uint64(GibMeOffset(p.PeFile.Sections, uint64(c.OffsetToData))))
-							if err := binary.Read(reader, binary.LittleEndian, &resourceData); err != nil {
-								return err
-							}
-
-							//fmt.Printf("Size Dir: %d %08X\n", resourceData.Size, uint64(GibMeOffset(p.PeFile.Sections, uint64(resourceData.OffsetToData))))
-						}
-						entry = resourceHeader
+						entry = rsdsEntry
 					} else {
-						fmt.Printf("Resource directory not pointing to anywhere, typical packed behaviour\n")
+						fmt.Printf("Debug directory not pointing to anywhere, typical packed behaviour\n")
 					}
-				*/
-
-			case IMAGE_DIRECTORY_ENTRY_EXCEPTION:
-				// not important, some PE perform hooking trough PAGE_GUARD exception calling, rarely in
-				// the hacking scene.
-
-				sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
-				if sect != nil {
-					pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress)) //PtrToRVA(uint64(p.PeFile.OptionalHeader64.Directories[v].VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
-					p.setPointer(reader, uint64(pointer))
-
-					// not going deeper, for now.
-				}
-			case IMAGE_DIRECTORY_ENTRY_SECURITY:
-				headerInfo := make([]byte, SIZE_WIN_CERTIFICATE_HDR)
-
-				p.setPointer(reader, uint64(directory.VirtualAddress))
-				red, err := reader.Read(headerInfo)
-				if err != nil {
-					return err
-				} else if red != SIZE_WIN_CERTIFICATE_HDR {
-					return errors.New("Didn't read 8 bytes during security directory header reading, something's wrong.")
+				case IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:
+					// useless, should contain architecture info, rarely seen.
+				case IMAGE_DIRECTORY_ENTRY_RESERVED:
+					// useless
+				case IMAGE_DIRECTORY_ENTRY_TLS:
+					// threads global vars and semaphores/mutexes, actually useless.
+				case IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG:
+					// useless
+				case IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT:
+					// might be usefull
+				case IMAGE_DIRECTORY_ENTRY_IAT:
+					// fundamental
+				case IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT:
+					// not used anymore, GetProcAddress replaced the use of this.
+				case IMAGE_DIRECTORY_ENTRY_CLR_DESCRIPTOR:
+					// CLR/.NET metadata, might be usefull.
+				default:
+					return errors.New("Out of directory scanning index, this should never happen.")
 				}
 
-				readeri := bytes.NewReader(headerInfo)
-				binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.Length)
-				binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.Revision)
-				binary.Read(readeri, binary.LittleEndian, &p.PeFile.AuthInfo.Certificate.CerificateType)
-
-				if p.PeFile.AuthInfo.Certificate.CerificateType == WIN_CERT_TYPE_PKCS_SIGNED_DATA || p.PeFile.AuthInfo.Certificate.CerificateType == WIN_CERT_TYPE_X509 {
-					if p.PeFile.AuthInfo.Certificate.Revision == WIN_CERT_REVISION_1_0 || p.PeFile.AuthInfo.Certificate.Revision == WIN_CERT_REVISION_2_0 {
-						p.PeFile.AuthInfo.Certificate.Certificate = make([]byte, directory.Size-SIZE_WIN_CERTIFICATE_HDR)
-
-						p.setPointer(reader, uint64(directory.VirtualAddress+SIZE_WIN_CERTIFICATE_HDR))
-
-						red, err := reader.Read(p.PeFile.AuthInfo.Certificate.Certificate)
-
-						if err != nil {
-							return err
-						} else if uint64(red) != uint64(p.PeFile.AuthInfo.Certificate.Length-SIZE_WIN_CERTIFICATE_HDR) {
-							return errors.New("Didn't read real length of certificate, something's wrong.")
-						}
-
-						p.PeFile.AuthInfo.Path = p.Path
-						//p.PeFile.AuthRes = p.PeFile.AuthInfo.Validate()
-						//p.PeFile.AuthInfo.DeptInfo = *p.PeFile.AuthInfo.GetInDeptInfo()
-						au := Authenticode{}
-						au.Initialize(0, 0, int(p.PeFile.AuthInfo.Certificate.RealLength), p.PeFile.AuthInfo.Certificate.Certificate)
-						if !au.Parse() {
-							fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
-						}
-						p.PeFile.AuthInfoGo = au
-						p.PeFile.AuthInfo.Certificate.Certificate = nil
-					}
+				if entry != nil {
+					p.PeFile.DataDirectory[DirectoryEntryType(v)] = entry
 				}
-
-			case IMAGE_DIRECTORY_ENTRY_BASERELOC:
-				// useless for us
-			case IMAGE_DIRECTORY_ENTRY_DEBUG:
-				// might contain usefull info on compilation of pe
-				// Raw data of entry vary from compiler to compiler.
-				sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
-				if sect != nil {
-					pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress)) //PtrToRVA(uint64(p.PeFile.OptionalHeader64.Directories[v].VirtualAddress), uint64(sect.VirtualAddress), uint64(sect.PointerToRawData))
-					p.setPointer(reader, uint64(pointer))
-					var debugDir DebugDirectory
-					var rsdsEntry RSDSEntry
-
-					//fmt.Printf("Debug -> %s -> %08X\n", string(sect.Name[:]), pointer)
-					if err := binary.Read(reader, binary.LittleEndian, &debugDir); err != nil {
-						return err
-					}
-
-					p.setPointer(reader, uint64(debugDir.PointerToRawData)+24)
-					var pdbStringSize int = 0
-					for {
-						var btrPlaceHolder byte
-						if err := binary.Read(reader, binary.LittleEndian, &btrPlaceHolder); err != nil {
-							return err
-						}
-						pdbStringSize++
-						if btrPlaceHolder == 0x00 {
-							break
-						}
-					}
-					rsdsEntry.Name = make([]byte, pdbStringSize)
-
-					p.setPointer(reader, uint64(debugDir.PointerToRawData))
-					if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Magic); err != nil {
-						return err
-					}
-					if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Hash); err != nil {
-						return err
-					}
-					if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.PDBFiles); err != nil {
-						return err
-					}
-					if err := binary.Read(reader, binary.LittleEndian, &rsdsEntry.Name); err != nil {
-						return err
-					}
-
-					entry = rsdsEntry
-				} else {
-					fmt.Printf("Debug directory not pointing to anywhere, typical packed behaviour\n")
-				}
-			case IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:
-				// useless, should contain architecture info, rarely seen.
-			case IMAGE_DIRECTORY_ENTRY_RESERVED:
-				// useless
-			case IMAGE_DIRECTORY_ENTRY_TLS:
-				// threads global vars and semaphores/mutexes, actually useless.
-			case IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG:
-				// useless
-			case IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT:
-				// might be usefull
-			case IMAGE_DIRECTORY_ENTRY_IAT:
-				// fundamental
-			case IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT:
-				// not used anymore, GetProcAddress replaced the use of this.
-			case IMAGE_DIRECTORY_ENTRY_CLR_DESCRIPTOR:
-				// CLR/.NET metadata, might be usefull.
-			default:
-				return errors.New("Out of directory scanning index, this should never happen.")
-			}
-
-			if entry != nil {
-				p.PeFile.DataDirectory[DirectoryEntryType(v)] = entry
+			} else {
+				fmt.Printf("Section %d is way more large than possible.\n", v)
 			}
 		}
+
 	}
 
 	return nil

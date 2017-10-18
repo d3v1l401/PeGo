@@ -11,11 +11,12 @@ import (
 	"./nsspe"
 )
 
-func processfile(filename string, scanType, signaturePath string) {
+func processfile(filename string, scanType, signaturePath, outpath string) {
 	pe := &nsspe.Parsed{}
 	pe.Path = filename
 	buffer, _ := ioutil.ReadFile(pe.Path)
 
+	fmt.Printf("Parsing %s...\n", filename)
 	err := pe.Parse(buffer, scanType, signaturePath)
 	if err != nil {
 		fmt.Printf("Error processing %v: %v\n", filename, err)
@@ -26,7 +27,11 @@ func processfile(filename string, scanType, signaturePath string) {
 		fmt.Printf("Error JSON encoding %v: %v\n", filename, err)
 		return
 	}
-	ioutil.WriteFile(filepath.Base(filename)+".json", json, 0644)
+	if len(outpath) > 0 {
+		ioutil.WriteFile(outpath+"\\"+filepath.Base(filename)+".json", json, 0644)
+	} else {
+		ioutil.WriteFile(filepath.Base(filename)+".json", json, 0644)
+	}
 }
 
 func main() {
@@ -34,16 +39,18 @@ func main() {
 	var path string
 	var signaturePath string
 	var scanType string
+	var outPath string
 	flag.StringVar(&filename, "file", "", "Process this file")
 	flag.StringVar(&path, "path", "C:/Windows/System32", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")
+	flag.StringVar(&outPath, "outpath", "", "Output path for reports.")
 
 	flag.Parse()
 
 	if filename != "" {
 		// Process a file
-		processfile(filename, scanType, signaturePath)
+		processfile(filename, scanType, signaturePath, outPath)
 	} else {
 		// Process a folder
 		files, err := ioutil.ReadDir(path)
@@ -53,7 +60,7 @@ func main() {
 
 		for _, f := range files {
 			//			fmt.Println("Parsing " + f.Name())
-			processfile(f.Name(), scanType, signaturePath)
+			processfile(path+"\\"+f.Name(), scanType, signaturePath, outPath)
 		}
 	}
 	/*	pe := &nsspe.Parsed{}
