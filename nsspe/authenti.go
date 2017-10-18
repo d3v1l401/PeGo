@@ -33,7 +33,7 @@ func (a *Authenticode) Parse() bool {
 	if a.Buffer != nil && len(a.Buffer) > 0 {
 		signer, err := pkcs7.Parse(a.Buffer)
 		if err != nil {
-			panic(err)
+			return false
 		}
 
 		//for index := 100; index < 100+16; index++ {
