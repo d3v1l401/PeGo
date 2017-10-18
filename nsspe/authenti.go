@@ -1,8 +1,6 @@
 package nsspe
 
 import (
-	"fmt"
-
 	"github.com/fullsailor/pkcs7"
 )
 
@@ -11,6 +9,8 @@ type Authenticode struct {
 	Type     int
 	Size     int
 	Buffer   []byte
+
+	DeptInfo []string
 }
 
 func (a *Authenticode) Initialize(revision, encType, size int, buffer []byte) bool {
@@ -36,17 +36,19 @@ func (a *Authenticode) Parse() bool {
 			panic(err)
 		}
 
-		for index := 100; index < 100+16; index++ {
-			fmt.Printf("%02X ", a.Buffer[index])
-		}
-		fmt.Println()
+		//for index := 100; index < 100+16; index++ {
+		//	fmt.Printf("%02X ", a.Buffer[index])
+		//}
+		//fmt.Println()
 
 		for _, v := range signer.Signers {
-			fmt.Println(string(v.IssuerAndSerialNumber.IssuerName.FullBytes))
+			a.DeptInfo = append(a.DeptInfo, string(v.IssuerAndSerialNumber.IssuerName.FullBytes))
 		}
-		for _, v := range signer.Certificates {
-			fmt.Println(v.CRLDistributionPoints)
-		}
+
+		return true
+		//for _, v := range signer.Certificates {
+		//	a.DeptInfo = append(a.DeptInfo, string(v.CRLDistributionPoints))
+		//}
 	}
 
 	return false

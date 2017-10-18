@@ -65,9 +65,10 @@ type PE struct {
 
 	ImportedAPI map[string][]ImportEntry
 
-	AuthInfo AuthentInfo
-	AuthRes  bool
-	AuthHash string
+	AuthInfo   AuthentInfo
+	AuthRes    bool
+	AuthHash   string
+	AuthInfoGo Authenticode
 
 	isLargeAddress bool
 

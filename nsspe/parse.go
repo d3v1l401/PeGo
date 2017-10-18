@@ -529,8 +529,15 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 						}
 
 						p.PeFile.AuthInfo.Path = p.Path
-						p.PeFile.AuthRes = p.PeFile.AuthInfo.Validate()
-						p.PeFile.AuthInfo.DeptInfo = *p.PeFile.AuthInfo.GetInDeptInfo()
+						//p.PeFile.AuthRes = p.PeFile.AuthInfo.Validate()
+						//p.PeFile.AuthInfo.DeptInfo = *p.PeFile.AuthInfo.GetInDeptInfo()
+						au := Authenticode{}
+						au.Initialize(0, 0, int(p.PeFile.AuthInfo.Certificate.RealLength), p.PeFile.AuthInfo.Certificate.Certificate)
+						if !au.Parse() {
+							fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
+						}
+						p.PeFile.AuthInfoGo = au
+						p.PeFile.AuthInfo.Certificate.Certificate = nil
 					}
 				}
 

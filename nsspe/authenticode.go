@@ -1,12 +1,5 @@
 package nsspe
 
-import (
-	"bytes"
-	"encoding/binary"
-
-	"./crypto"
-)
-
 type AuthentInfo struct {
 	AnomaliesDetected Anomalies
 	Path              string
@@ -14,6 +7,7 @@ type AuthentInfo struct {
 	DeptInfo          SignerInfo
 }
 
+/*
 func (ad *Anomalies) HasExtraPayload() bool {
 	return ad.PayloadAfterSignature
 }
@@ -82,3 +76,4 @@ func (a *AuthentInfo) Validate() bool {
 
 	return true && a.performCryptoValidation()
 }
+*/
