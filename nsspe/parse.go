@@ -724,11 +724,13 @@ func (p *Parsed) loadSignatures(types string, dbpath string) error {
 	if strings.Compare(SCANTYPE_OFF, types) == 0 {
 		p.signDb = nil
 	} else if strings.Compare(SCANTYPE_FULL, types) == 0 || strings.Compare(SCANTYPE_EPONLY, types) == 0 {
-		db, err := LoadSignatures(dbpath)
-		if err != nil {
-			return err
-		} else {
-			p.signDb = db
+		if p.signDb == nil { // Ugly
+			db, err := LoadSignatures(dbpath)
+			if err != nil {
+				return err
+			} else {
+				p.signDb = db
+			}
 		}
 	}
 	return nil

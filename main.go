@@ -27,11 +27,7 @@ func processfile(filename string, scanType, signaturePath, outpath string) {
 		fmt.Printf("Error JSON encoding %v: %v\n", filename, err)
 		return
 	}
-	if len(outpath) > 0 {
-		ioutil.WriteFile(outpath+"\\"+filepath.Base(filename)+".json", json, 0644)
-	} else {
-		ioutil.WriteFile(filepath.Base(filename)+".json", json, 0644)
-	}
+	ioutil.WriteFile(filepath.Join(outpath, filepath.Base(filename)+".json"), json, 0644)
 }
 
 func main() {
@@ -48,7 +44,11 @@ func main() {
 
 	flag.Parse()
 
-	if filename != "" {
+	if len(flag.Args()) > 0 {
+		for _, name := range flag.Args() {
+			processfile(name, scanType, signaturePath, outPath)
+		}
+	} else if filename != "" {
 		// Process a file
 		processfile(filename, scanType, signaturePath, outPath)
 	} else {
@@ -60,7 +60,7 @@ func main() {
 
 		for _, f := range files {
 			//			fmt.Println("Parsing " + f.Name())
-			processfile(path+"\\"+f.Name(), scanType, signaturePath, outPath)
+			processfile(filepath.Join(path, f.Name()), scanType, signaturePath, outPath)
 		}
 	}
 	/*	pe := &nsspe.Parsed{}
