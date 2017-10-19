@@ -16,19 +16,20 @@ func processfile(filename string, scanType, signaturePath, outpath, ordmap strin
 	pe.Path = filename
 	buffer, _ := ioutil.ReadFile(pe.Path)
 
-	fmt.Printf("Parsing %s...\n", filename)
 	pe.OrdinalResolver(ordmap)
+	fmt.Printf("\t%s... ", filename)
 	err := pe.Parse(buffer, scanType, signaturePath)
 	if err != nil {
-		fmt.Printf("Error processing %v: %v\n", filename, err)
+		fmt.Printf("NO (%v)\n", err)
 		return
 	}
 	json, err := json.Marshal(pe)
 	if err != nil {
-		fmt.Printf("Error JSON encoding %v: %v\n", filename, err)
+		fmt.Printf("NO (%v)\n", err)
 		return
 	}
 	ioutil.WriteFile(filepath.Join(outpath, filepath.Base(filename)+".json"), json, 0644)
+	fmt.Printf("OK\n")
 }
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 	var scanType string
 	var outPath string
 	var ordMap string
-	flag.StringVar(&filename, "file", "procexp64.exe.target", "Process this file.")
+	flag.StringVar(&filename, "file", "", "Process this file.")
 	flag.StringVar(&path, "path", "", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")
@@ -47,6 +48,7 @@ func main() {
 
 	flag.Parse()
 
+	fmt.Printf("Parsing...\n")
 	if len(flag.Args()) > 0 {
 		for _, name := range flag.Args() {
 			processfile(name, scanType, signaturePath, outPath, ordMap)
@@ -62,7 +64,7 @@ func main() {
 		}
 
 		for _, f := range files {
-			//			fmt.Println("Parsing " + f.Name())
+			// fmt.Println("Parsing " + f.Name())
 			processfile(filepath.Join(path, f.Name()), scanType, signaturePath, outPath, ordMap)
 		}
 	}

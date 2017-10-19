@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -423,7 +422,18 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 										break
 									}
 									addr, err = p.bytesrva(int(rva), 4)
+									if len(addr) != 4 {
+										break
+									}
+									addross := binary.BigEndian.Uint32(addr)
+									if err != nil {
+										break
+									}
+									if GibMeOffset(p.PeFile.Sections, uint64(addross)) >= int64(len(p.data)) {
+										break
+									}
 									oft = uint64(binary.LittleEndian.Uint32(addr))
+
 									if oft&0x80000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
@@ -435,6 +445,10 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 										ordSet, err := p.bytesrva(int(oft), 2)
 										if err != nil {
+											break
+										}
+										if len(ordSet) != 2 {
+											p.PeFile.Sabotages.RecursiveIAT = true
 											break
 										}
 										ordinal = binary.LittleEndian.Uint16(ordSet) // routine
@@ -454,6 +468,17 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 										break
 									}
 									addr, err = p.bytesrva(int(rva), 8)
+									if len(addr) != 8 {
+										p.PeFile.Sabotages.RecursiveIAT = true
+										break
+									}
+									addross := binary.BigEndian.Uint32(addr)
+									if err != nil {
+										break
+									}
+									if GibMeOffset(p.PeFile.Sections, uint64(addross)) >= int64(len(p.data)) {
+										break
+									}
 									oft = uint64(binary.LittleEndian.Uint32(addr))
 
 									if oft&0x8000000000000000 != 0 {
@@ -466,6 +491,11 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 										lastOrd = oft
 										ordSet, err := p.bytesrva(int(oft), 2)
 										if err != nil {
+											break
+										}
+
+										if len(ordSet) != 2 {
+											p.PeFile.Sabotages.RecursiveIAT = true
 											break
 										}
 										ordinal = binary.LittleEndian.Uint16(ordSet) // routine
@@ -629,7 +659,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							p.PeFile.AuthRes = au.Parse()
 							if !p.PeFile.AuthRes {
 								// Happens when it's reading an old COPYRIGHT format or if signature is wrong revision (1) or when simply it's a bunch of junk bytes or encrypted stuff.
-								fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
+								//fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
 								p.PeFile.AuthRes = false
 							}
 							p.PeFile.AuthInfoGo = au
@@ -684,7 +714,8 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 						entry = rsdsEntry
 					} else {
-						fmt.Printf("Debug directory not pointing to anywhere, typical packed behaviour\n")
+						p.PeFile.Sabotages.DirectoryEvasion = true
+						//fmt.Printf("Debug directory not pointing to anywhere, typical packed behaviour\n")
 						// Left over of a packer that might have removed the debug info but left pointers to confuse REnegineers.
 					}
 				case IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:
@@ -712,7 +743,8 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 					p.PeFile.DataDirectory[DirectoryEntryType(v)] = entry
 				}
 			} else {
-				fmt.Printf("Section %d is way more large than possible.\n", v)
+				//fmt.Printf("Section %d is way more large than possible.\n", v)
+				p.PeFile.Sabotages.IncorrectSizes = true
 			}
 		}
 
