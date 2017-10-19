@@ -223,7 +223,11 @@ func (p *Parsed) parseSECT(reader *bytes.Reader) error {
 
 	}
 
-	return nil
+	if (len(p.PeFile.Sections) > 0) {
+		return nil
+	}
+
+	return errors.New("Empty sections...")
 }
 
 func readUTFString(buff []byte, offset uint64, size uint) string {

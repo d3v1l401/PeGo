@@ -75,7 +75,10 @@ func RvaToRawAddr(section SectionHeader, rva int64) int64 {
 
 func GibMeOffset(sections []SectionHeader, rva uint64) int64 {
 	sect, rvaa := PtrToRVA2(sections, rva)
-	return RvaToRawAddr(*sect, rvaa)
+	if len(sections) > 0 {
+		return RvaToRawAddr(*sect, rvaa)
+	}
+	return 0
 }
 
 func DecodeCOFFCharacts(characts uint16) *COFFCharacteristics {
