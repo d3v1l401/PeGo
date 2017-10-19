@@ -411,7 +411,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							rva := impDec.OriginalFirstThunk
 
 							for {
-								//var addr []byte
+								var addr []byte
 								var oft uint64
 								var name string
 								var ordinal uint16
@@ -422,8 +422,8 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 										// RVA is 0, so entry is useless.
 										break
 									}
-									//addr = p.bytesrva(int(rva), 4)
-									oft = uint64(GibMeOffset(p.PeFile.Sections, uint64(rva)))
+									addr, err = p.bytesrva(int(rva), 4)
+									oft = uint64(binary.LittleEndian.Uint32(addr))
 									if oft&0x80000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
@@ -443,6 +443,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 											break
 										}
 										name = readZeroTerminatedString(nameSet)
+
 										if ordinal == 0 && len(name) < 1 {
 											break
 										}
@@ -452,16 +453,17 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									if rva == 0 {
 										break
 									}
-									if lastOrd == oft {
-										break
-									}
-									lastOrd = oft
-									//addr = p.bytesrva(int(rva), 8)
-									oft = uint64(GibMeOffset(p.PeFile.Sections, uint64(rva)))
+									addr, err = p.bytesrva(int(rva), 8)
+									oft = uint64(binary.LittleEndian.Uint32(addr))
 
 									if oft&0x8000000000000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
+
+										if lastOrd == oft {
+											break
+										}
+										lastOrd = oft
 										ordSet, err := p.bytesrva(int(oft), 2)
 										if err != nil {
 											break
