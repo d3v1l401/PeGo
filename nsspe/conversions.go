@@ -60,7 +60,7 @@ func PtrToRVA2(sections []SectionHeader, rva uint64) (*SectionHeader, int64) {
 	var offset int64
 	for i := range sections {
 		section = &sections[i]
-		if (uint64(section.VirtualAddress) <= rva) && (rva < uint64(section.VirtualAddress+section.VirtualSize)) {
+		if (uint64(section.VirtualAddress) <= rva) && (rva < uint64(section.VirtualAddress+section.SizeOfRawData)) {
 			offset = int64(rva - uint64(section.VirtualAddress))
 			break
 		}

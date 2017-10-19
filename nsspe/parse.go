@@ -101,7 +101,8 @@ func (p *Parsed) parseNT(reader *bytes.Reader) error {
 	}
 
 	if p.PeFile.NtHeaders.Signature != IMAGE_NT_SIGNATURE {
-		return errors.New("NT Header is not an executable PE file.")
+		p.PeFile.Sabotages.AbnormalPE = true
+		return errors.New("No NT Header, DOS era malware?")
 	}
 
 	return nil
@@ -384,7 +385,11 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 								return err
 							}
 
-							impdname := readZeroTerminatedString(p.bytes(int(GibMeOffset(p.PeFile.Sections, uint64(impDec.Name))), 0))
+							impdnameSet, err := p.bytes(int(GibMeOffset(p.PeFile.Sections, uint64(impDec.Name))), 0)
+							if err != nil {
+								break
+							}
+							impdname := readZeroTerminatedString(impdnameSet)
 							//fmt.Printf("Import Descriptor (%08X) -> IAT %08X [copy %08X] (%v)\n", impDec.Name, impDec.OriginalFirstThunk, impDec.FirstThunk, name)
 
 							rva := impDec.OriginalFirstThunk
@@ -409,12 +414,17 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 											break
 										}
 										lastOrd = oft
-										fmt.Println(GibMeOffset(p.PeFile.Sections, oft))
-										res := p.bytesrva(int(oft), 2)
-										uintttt := binary.LittleEndian.Uint16(res)
-										fmt.Println(res, uintttt)
-										ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
-										name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+
+										ordSet, err := p.bytesrva(int(oft), 2)
+										if err != nil {
+											break
+										}
+										ordinal = binary.LittleEndian.Uint16(ordSet) // routine
+										nameSet, err := p.bytesrva(int(oft+2), 0)
+										if err != nil {
+											break
+										}
+										name = readZeroTerminatedString(nameSet)
 										if ordinal == 0 && len(name) < 1 {
 											break
 										}
@@ -424,13 +434,27 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									if rva == 0 {
 										break
 									}
+									if lastOrd == oft {
+										break
+									}
+									lastOrd = oft
 									//addr = p.bytesrva(int(rva), 8)
 									oft = uint64(GibMeOffset(p.PeFile.Sections, uint64(rva)))
+
 									if oft&0x8000000000000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
-										ordinal = binary.LittleEndian.Uint16(p.bytesrva(int(oft), 2)) // routine
-										name = readZeroTerminatedString(p.bytesrva(int(oft+2), 0))
+										ordSet, err := p.bytesrva(int(oft), 2)
+										if err != nil {
+											break
+										}
+										ordinal = binary.LittleEndian.Uint16(ordSet) // routine
+
+										nameSet, err := p.bytesrva(int(oft+2), 0)
+										if err != nil {
+											break
+										}
+										name = readZeroTerminatedString(nameSet)
 									}
 								}
 								if oft == 0 {
@@ -468,7 +492,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 								}
 
 								if len(impdname) > 1 {
-									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
+									//imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
 								}
 
 							}
@@ -718,16 +742,17 @@ func checkError(err error) bool {
 	return false
 }
 
-func (p *Parsed) bytesrva(offset, length int) []byte {
+func (p *Parsed) bytesrva(offset, length int) ([]byte, error) {
 	return p.bytes(int(GibMeOffset(p.PeFile.Sections, uint64(offset))), length)
 }
 
-func (p *Parsed) bytes(offset, length int) []byte {
+func (p *Parsed) bytes(offset, length int) ([]byte, error) {
 	if p.data == nil { // No data
-		return []byte{}
+		return []byte{0}, errors.New("No data")
 	}
 	if offset >= len(p.data) { // Not enough data
-		return []byte{}
+		//fmt.Println("not enough data...", offset, ">", len(p.data))
+		return []byte{0}, errors.New("Not enough data")
 	}
 	end := offset + length
 	if length == 0 {
@@ -735,7 +760,7 @@ func (p *Parsed) bytes(offset, length int) []byte {
 	} else if end >= len(p.data) {
 		end = len(p.data)
 	}
-	return p.data[offset:end]
+	return p.data[offset:end], nil
 }
 
 func (p *Parsed) adjustValues() error {
