@@ -826,7 +826,11 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 	}
 
 	p.data = buffer
-	defer func() { p.data = nil }() // forget it
+	defer func() {
+		p.data = nil
+		p.signDb = nil
+		p.ordMap = nil
+	}() // forget it and clean everything
 
 	if len(buffer) > 1 {
 
@@ -874,11 +878,12 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 			return err
 		}
 
-		//p.PeFile.AuthHash = p.getHash(reader)
 		err = p.parseEP(reader)
 		if checkError(err) {
 			return err
 		}
+
+		//p.PeFile.AuthHash = p.getHash(reader)
 
 		return nil // Success
 	}
