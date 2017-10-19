@@ -472,11 +472,11 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									Ordinal: uint(ordinal),
 									Name:    name,
 								}
-								if len(name) < 1 && stuz.Ordinal > 0 && stuz.Ordinal < 1000 {
-									stuz.Name = p.resolveOrdinal(int(stuz.Ordinal), impdname)
-								} else {
-									break
-								}
+								//if len(name) < 1 && stuz.Ordinal > 0 && stuz.Ordinal < 1000 {
+								//	stuz.Name = p.resolveOrdinal(int(stuz.Ordinal), impdname)
+								//} else {
+								//	break
+								//}
 
 								if len(name) < 350 {
 									if len(p.PeFile.ImportedAPI[impdname]) < 500 {
@@ -488,10 +488,10 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 								} else {
 									p.PeFile.Sabotages.HeavilyEncrypted = true
-									fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
+									//fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
 								}
 
-								if len(impdname) > 1 {
+								if len(impdname) > 1 && len(name) > 0 && ordinal > 0 {
 									//imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
 								}
 
