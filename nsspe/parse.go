@@ -74,6 +74,8 @@ func (p *Parsed) parseRich(reader *bytes.Reader) error {
 	p.setPointer(reader, SIZE_OF_DOSH+SIZE_OF_DOSI)
 
 	THIS_SIZE_OF_RICH = uint((p.PeFile.DosHeader.E_lfanew) - uint32(SIZE_OF_DOSH+SIZE_OF_DOSI))
+	// Rich header might not be present in some very old samples, let's read it only if it's ok and exists.
+	// Reading it influences the alignment of the next header.
 	if THIS_SIZE_OF_RICH > MIN_SIZE_OF_RICH && THIS_SIZE_OF_RICH < 0x200 {
 		buff := make([]byte, THIS_SIZE_OF_RICH)
 		if err := binary.Read(reader, binary.BigEndian, &buff); err != nil {
@@ -100,6 +102,7 @@ func (p *Parsed) parseNT(reader *bytes.Reader) error {
 		return err
 	}
 
+	// NT Header flags modern PEs (1998+) and is mandatory.
 	if p.PeFile.NtHeaders.Signature != IMAGE_NT_SIGNATURE {
 		p.PeFile.Sabotages.AbnormalPE = true
 		return errors.New("No NT Header, DOS era malware?")
@@ -115,15 +118,19 @@ func (p *Parsed) parseCOFF(reader *bytes.Reader) error {
 		return err
 	}
 
+	// There are malwares with 1 section, but that's literally illegal now.
 	if p.PeFile.FileHeader.NumberOfSections < 2 {
 		p.PeFile.Sabotages.AbnormalPE = true
 	}
 
+	// Optional header has 2 fixed sizes, or a stinky hand was in here.
 	if p.PeFile.FileHeader.SizeOfOptionalHeader < SIZE_OF_OPT {
 		p.PeFile.Sabotages.AbnormalPE = true
 	}
 	THIS_SIZE_OF_OPT = uint(p.PeFile.FileHeader.SizeOfOptionalHeader)
 
+	// We do not care if these are not x32 or x64 PEs, and try to parse them anyway.
+	// We do this to ensure malware ring0s also will be parsed, but it is not common to find modern drivers with the from architecture.
 	if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 {
 		if p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 {
 			p.PeFile.Sabotages.AbnormalPE = true
@@ -165,6 +172,8 @@ func (p *Parsed) parseOPT(reader *bytes.Reader) error {
 		if err != nil {
 			return err
 		}
+
+		// A PE can't have different architecture specifications in 2 headers.
 		if p.PeFile.OptionalHeader.Magic == OPTIONAL_HEADER_MAGIC_PE && p.PeFile.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 {
 			p.PeFile.Sabotages.AbnormalPE = true
 		}
@@ -223,7 +232,7 @@ func (p *Parsed) parseSECT(reader *bytes.Reader) error {
 
 	}
 
-	if (len(p.PeFile.Sections) > 0) {
+	if len(p.PeFile.Sections) > 0 {
 		return nil
 	}
 
@@ -267,6 +276,7 @@ func (p *Parsed) particularCases(reader *bytes.Reader) error {
 	p.setPointer(reader, uint64(p.PeFile.OptionalHeader.Directories[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress))
 	rawBuff := make([]byte, reader.Len())
 	reader.Read(rawBuff)
+	// InternalName
 	rawPattern := [...]byte{0x49, 0x00, 0x6E, 0x00, 0x74, 0x00, 0x65, 0x00, 0x72, 0x00, 0x6E, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x4E, 0x00, 0x61, 0x00, 0x6D, 0x00, 0x65}
 	index := bytes.Index(rawBuff, rawPattern[:])
 	if index != -1 {
@@ -274,6 +284,7 @@ func (p *Parsed) particularCases(reader *bytes.Reader) error {
 	} else {
 		//fmt.Printf("Internal name not found.\n")
 	}
+	// OriginalFileName
 	rawPattern2 := [...]byte{0x4F, 0x00, 0x72, 0x00, 0x69, 0x00, 0x67, 0x00, 0x69, 0x00, 0x6E, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x46, 0x00, 0x69, 0x00, 0x6C, 0x00, 0x65, 0x00, 0x6E, 0x00, 0x61, 0x00, 0x6D, 0x00, 0x65}
 	index = bytes.Index(rawBuff, rawPattern2[:])
 	if index != -1 {
@@ -355,6 +366,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 	for v, directory := range p.PeFile.OptionalHeader.Directories {
 		if directory.VirtualAddress > 0 && directory.Size > 0 {
 
+			// Directory can't be more than 1 GB, even if size is a uin32.
 			if directory.Size < 1*1024*1024*1024 {
 
 				var entry interface{}
@@ -407,6 +419,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									//dontCashMeOutside := GibMeOffset(p.PeFile.Sections, uint64(rva))
 									//maxCashOutside := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress+directory.Size))
 									if rva == 0 {
+										// RVA is 0, so entry is useless.
 										break
 									}
 									//addr = p.bytesrva(int(rva), 4)
@@ -414,6 +427,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									if oft&0x80000000 != 0 {
 										ordinal = uint16(oft & 0xFFFF)
 									} else {
+										// Repeated import, probably memory exhaustion attempt.
 										if lastOrd == oft {
 											break
 										}
@@ -482,10 +496,13 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 								//	break
 								//}
 
+								// IAT might be a huge file name, that happens when is encrypted or faked.
 								if len(name) < 350 {
 									if len(p.PeFile.ImportedAPI[impdname]) < 500 {
 										p.PeFile.ImportedAPI[impdname] = append(p.PeFile.ImportedAPI[impdname], stuz)
 									} else {
+										// Too many entries, you can't have more than 500 imports, realistically speaking
+										// Might be a memory exhaustion attempt.
 										p.PeFile.Sabotages.RecursiveIAT = true
 										break
 									}
@@ -609,6 +626,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							au.Initialize(0, 0, int(p.PeFile.AuthInfo.Certificate.RealLength), p.PeFile.AuthInfo.Certificate.Certificate)
 							p.PeFile.AuthRes = au.Parse()
 							if !p.PeFile.AuthRes {
+								// Happens when it's reading an old COPYRIGHT format or if signature is wrong revision (1) or when simply it's a bunch of junk bytes or encrypted stuff.
 								fmt.Printf("Warning: Authenticode certificate failed to be parsed.\n")
 								p.PeFile.AuthRes = false
 							}
@@ -665,6 +683,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 						entry = rsdsEntry
 					} else {
 						fmt.Printf("Debug directory not pointing to anywhere, typical packed behaviour\n")
+						// Left over of a packer that might have removed the debug info but left pointers to confuse REnegineers.
 					}
 				case IMAGE_DIRECTORY_ENTRY_ARCHITECTURE:
 					// useless, should contain architecture info, rarely seen.
@@ -684,6 +703,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 					// CLR/.NET metadata, might be usefull.
 				default:
 					return errors.New("Out of directory scanning index, this should never happen.")
+					// This happens if the number of directories in OPt header is more than 16, which means it has been manually edited to scramble stuff.
 				}
 
 				if entry != nil {
