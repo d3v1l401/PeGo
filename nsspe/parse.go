@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -409,6 +410,54 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							if p.PeFile.ExpLeaks.ExportedFunctions < 0 {
 								p.PeFile.Sabotages.ScrambledAddresses = true
 								break
+							}
+
+							var Entry ExportEntry
+							var holder32 uint32
+							var holder64 uint64
+							var lastNameSize int = 0
+							lastNameSize = 0
+							for index := 0; index < int(exportsHeader.NumberOfFunctions); index++ {
+
+								FunPointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfFunctions+uint32(4*index)))
+								OrdPointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfNameOrdinals+uint32(4*index)))
+								//NamePointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfNames+uint32(4*index)))
+
+								p.setPointer(reader, uint64(FunPointer))
+
+								if p.PeFile.isLargeAddress {
+									if err = binary.Read(reader, binary.LittleEndian, &holder64); err != nil {
+										return err
+									}
+									Entry.Address = holder64
+								} else {
+									if err = binary.Read(reader, binary.LittleEndian, &holder32); err != nil {
+										return err
+									}
+									Entry.Address = uint64(holder32)
+								}
+
+								p.setPointer(reader, uint64(OrdPointer))
+								if err = binary.Read(reader, binary.LittleEndian, &Entry.Ordinal); err != nil {
+									return err
+								}
+								/*
+									fmt.Println(GibMeOffset(p.PeFile.Sections, uint64(NamePointer)))
+									funName, err := p.bytesrva(int(NamePointer), 0)
+									if err != nil {
+										p.PeFile.Sabotages.ScrambledAddresses = true
+										break
+									}
+								*/
+								calcAddr := int(exportsHeader.Name) + int(len(p.PeFile.ExpLeaks.ActingName))
+								off, err := p.bytes(calcAddr, 0)
+								if err != nil {
+									return err
+								}
+								Entry.Name = readZeroTerminatedString(off)
+								lastNameSize = len(Entry.Name)
+
+								fmt.Println(Entry)
 							}
 
 						} else {
