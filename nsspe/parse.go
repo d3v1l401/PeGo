@@ -376,7 +376,46 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 				switch DirectoryEntryType(v) {
 				case IMAGE_DIRECTORY_ENTRY_EXPORT:
-					// Should be coded
+
+					sect := GetPointingSection(p.PeFile.Sections, uint64(directory.VirtualAddress))
+					if sect != nil {
+						pointer := GibMeOffset(p.PeFile.Sections, uint64(directory.VirtualAddress))
+						if pointer > 0 && pointer < int64(len(p.data)) {
+
+							p.setPointer(reader, uint64(pointer))
+							var exportsHeader ExportDirectory
+							rawStruct := make([]byte, binary.Size(ExportDirectory{}))
+							reader.Read(rawStruct)
+
+							// Reset pointer for parsing.
+							p.setPointer(reader, uint64(pointer))
+							if err := binary.Read(reader, binary.LittleEndian, &exportsHeader); err != nil {
+								return err
+							}
+
+							// Sometimes exports are always the same between different versions and only function addresses might change...
+							// Hashing everything except addresses might be a good idea.
+							p.PeFile.ExpLeaks.EXPDeep = spamsum.HashBytes(rawStruct).String()
+
+							addr, err := p.bytesrva(int(exportsHeader.Name), 0)
+							if err != nil {
+								break
+							}
+							dllName := readZeroTerminatedString(addr)
+							p.PeFile.ExpLeaks.ActingName = dllName
+							p.PeFile.ExpLeaks.CreationDate = exportsHeader.TimeDateStamp.String()
+							p.PeFile.ExpLeaks.ExportedFunctions = int(exportsHeader.NumberOfFunctions)
+
+							if p.PeFile.ExpLeaks.ExportedFunctions < 0 {
+								p.PeFile.Sabotages.ScrambledAddresses = true
+								break
+							}
+
+						} else {
+							p.PeFile.Sabotages.DirectoryEvasion = true
+						}
+					}
+
 				case IMAGE_DIRECTORY_ENTRY_IMPORT:
 					p.PeFile.ImportedAPI = make(map[string][]ImportEntry)
 					var lastOrd uint64 = 0

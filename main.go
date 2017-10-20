@@ -39,7 +39,7 @@ func main() {
 	var scanType string
 	var outPath string
 	var ordMap string
-	flag.StringVar(&filename, "file", "", "Process this file.")
+	flag.StringVar(&filename, "file", "mupack.exe", "Process this file.")
 	flag.StringVar(&path, "path", "", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")

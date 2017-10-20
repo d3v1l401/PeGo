@@ -58,6 +58,19 @@ type Signatures struct {
 	Signature []string
 }
 
+type ExportsInfo struct {
+	ActingName        string
+	CreationDate      string
+	ExportedFunctions int
+
+	EXPDeep string
+}
+
+type ExportEntry struct {
+	Ordinal uint16
+	Name    string
+	Address uint64
+}
 type PE struct {
 	FileAlignment uint32 `json:"-"`
 
@@ -74,6 +87,9 @@ type PE struct {
 	DirectoryEntries []ResourceDirectoryEntry `json:"-"`
 
 	ImportedAPI map[string][]ImportEntry
+	ExportedAPI []ExportEntry
+
+	ExpLeaks ExportsInfo
 
 	AuthInfo   AuthentInfo `json:"-"`
 	AuthRes    bool
