@@ -449,7 +449,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 										break
 									}
 								*/
-								calcAddr := int(exportsHeader.Name) + int(len(p.PeFile.ExpLeaks.ActingName))
+								calcAddr := int(GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.Name))) + int(len(p.PeFile.ExpLeaks.ActingName)+1) + int(lastNameSize)
 								off, err := p.bytes(calcAddr, 0)
 								if err != nil {
 									return err
