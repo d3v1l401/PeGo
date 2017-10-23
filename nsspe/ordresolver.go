@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"strconv"
+	"strings"
 )
 
 type lib map[int]string
@@ -23,9 +24,9 @@ func LoadResolveMaps(path string) (map[string]lib, error) {
 	return Mapped, nil
 }
 
-func (p *Parsed) resolveOrdinal(ordinal int, library string) string {
+func (p *Parsed) ResolveOrdinal(ordinal int, library string) string {
 	if p.ordMap != nil && len(p.ordMap) > 0 {
-		lib := p.ordMap[library]
+		lib := p.ordMap[strings.ToLower(library)]
 		return lib[ordinal]
 	}
 

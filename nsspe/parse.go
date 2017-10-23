@@ -2,11 +2,13 @@ package nsspe
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -481,6 +483,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 
 						counter := directory.Size / uint32(binary.Size(ImportDescriptor{}))
 
+						enabledImphash := false
 						for index := 1; index < int(counter); index++ {
 							var impDec ImportDescriptor
 
@@ -496,7 +499,6 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							//fmt.Printf("Import Descriptor (%08X) -> IAT %08X [copy %08X] (%v)\n", impDec.Name, impDec.OriginalFirstThunk, impDec.FirstThunk, name)
 
 							rva := impDec.OriginalFirstThunk
-
 							for {
 								var addr []byte
 								var oft uint64
@@ -632,16 +634,27 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									//fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
 								}
 
-								if len(impdname) > 1 && len(name) > 0 && ordinal > 0 {
-									//imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
+								if len(impdname) > 1 && len(name) > 0 && ordinal > 0 && len(name) < 350 {
+									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
+									enabledImphash = true
+								} else if len(impdname) > 1 && len(name) == 0 && ordinal > 0 && ordinal < 1000 {
+									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), p.ResolveOrdinal(int(ordinal), impdname)))
+									enabledImphash = true
+								} else {
+									enabledImphash = false
 								}
 
 							}
 						}
-						//h := md5.New()
-						//h.Write([]byte(strings.Join(imphashparts, ",")))
-						//p.PeFile.ImpHash = string(hex.EncodeToString(h.Sum(nil)))
-						p.PeFile.ImpHash = strings.Join(imphashparts, ",")
+						if enabledImphash {
+							h := md5.New()
+							h.Write([]byte(strings.Join(imphashparts, ",")))
+							hash := h.Sum(nil)
+							p.PeFile.ImpHash = string(hex.EncodeToString(hash))
+						} else {
+							p.PeFile.ImpHash = "null"
+						}
+						//p.PeFile.ImpHash = strings.Join(imphashparts, ",")
 					}
 				case IMAGE_DIRECTORY_ENTRY_RESOURCE:
 					// not important, but some droppers store an encrypted payload version in resources, might be usefull

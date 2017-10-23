@@ -16,7 +16,15 @@ func processfile(filename string, scanType, signaturePath, outpath, ordmap strin
 	pe.Path = filename
 	buffer, _ := ioutil.ReadFile(pe.Path)
 
-	pe.OrdinalResolver(ordmap)
+	if len(ordmap) > 0 {
+		fmt.Printf("Loading Ordinal Map as specified...")
+		err := pe.OrdinalResolver(ordmap)
+		if err != nil {
+			fmt.Printf("NO (%v)\n", err)
+		} else {
+			fmt.Printf("OK\n")
+		}
+	}
 	fmt.Printf("\t%s... ", filename)
 	err := pe.Parse(buffer, scanType, signaturePath)
 	if err != nil {
@@ -39,7 +47,7 @@ func main() {
 	var scanType string
 	var outPath string
 	var ordMap string
-	flag.StringVar(&filename, "file", "mupack.exe", "Process this file.")
+	flag.StringVar(&filename, "file", "", "Process this file.")
 	flag.StringVar(&path, "path", "", "Path to start scanning files for PE parsing.")
 	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")

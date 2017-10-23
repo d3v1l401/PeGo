@@ -102,7 +102,7 @@ type PE struct {
 	OriginalName string
 
 	Indicators   *DllSecCharacteristics
-	ImpHash      string `json:"-"`
+	ImpHash      string
 	Packer       *PackerInfo
 	Miscellanous *Signatures
 
