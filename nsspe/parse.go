@@ -419,7 +419,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							for index := 0; index < int(exportsHeader.NumberOfFunctions); index++ {
 
 								FunPointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfFunctions+uint32(4*index)))
-								OrdPointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfNameOrdinals+uint32(4*index)))
+								OrdPointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfNameOrdinals+uint32(2*index)))
 								//NamePointer := GibMeOffset(p.PeFile.Sections, uint64(exportsHeader.AddressOfNames+uint32(4*index)))
 
 								p.setPointer(reader, uint64(FunPointer))
@@ -454,7 +454,7 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									return err
 								}
 								Entry.Name = readZeroTerminatedString(off)
-								lastNameSize = len(Entry.Name)
+								lastNameSize = len(Entry.Name) + 1
 
 								p.PeFile.ExportedAPI = append(p.PeFile.ExportedAPI, Entry)
 							}
