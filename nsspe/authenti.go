@@ -42,7 +42,7 @@ func (a *Authenticode) Parse() bool {
 		//fmt.Println()
 
 		for _, v := range signer.Signers {
-			a.DeptInfo = append(a.DeptInfo, string(v.IssuerAndSerialNumber.IssuerName.FullBytes))
+			a.DeptInfo = append(a.DeptInfo, string(v.IssuerAndSerialNumber.IssuerName.Bytes))
 		}
 
 		return true

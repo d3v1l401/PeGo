@@ -3,7 +3,6 @@ package nsspe
 import (
 	"bytes"
 	"crypto/md5"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -862,38 +861,8 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 }
 
 func (p *Parsed) getHash(reader *bytes.Reader) string {
-	distanceToChecksum := 0x40
-	offsetPreChecksum := int(SIZE_OF_DOSH + SIZE_OF_NTH + SIZE_OF_DOSI + int(THIS_SIZE_OF_RICH) + SIZE_OF_COFFH + distanceToChecksum)
-	mappedSections := make(map[uint32]SectionHeader, p.PeFile.FileHeader.NumberOfSections)
 
-	sha256 := sha256.New()
-	preChecksum := make([]byte, offsetPreChecksum)
-	p.setPointer(reader, 0)
-	binary.Read(reader, binary.BigEndian, preChecksum)
-
-	var postChecksumSize int = 0
-	if p.PeFile.isLargeAddress {
-		postChecksumSize = int(THIS_SIZE_OF_OPT - 68)
-	} else {
-		postChecksumSize = int(THIS_SIZE_OF_OPT - 64)
-	}
-
-	p.setPointer(reader, uint64(offsetPreChecksum+4))
-	postChecksum := make([]byte, postChecksumSize)
-	reader.Read(postChecksum)
-
-	postChecksumPreSecurity := make([]byte, int(p.PeFile.FileHeader.SizeOfOptionalHeader)-4-40+(binary.Size(DataDirectoryEntry{})*int(IMAGE_DIRECTORY_ENTRY_SECURITY)))
-	reader.Read(postChecksumPreSecurity)
-	p.setPointer(reader, uint64(len(postChecksumPreSecurity)+8))
-	postSecurity := make([]byte, int(p.PeFile.OptionalHeader.SizeOfHeaders)-(len(postChecksumPreSecurity)+8))
-	reader.Read(postSecurity)
-
-	//var SUM_OF_BYTES_HASHED uint = uint(p.PeFile.OptionalHeader.SizeOfHeaders)
-	for _, s := range p.PeFile.Sections {
-		mappedSections[s.PointerToRawData] = s
-	}
-
-	return hex.EncodeToString(sha256.Sum([]byte("-")))
+	return ""
 }
 
 func (p *Parsed) parseResourceDir(offset, size uint64) {
@@ -1025,7 +994,9 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 			return err
 		}
 
-		//p.PeFile.AuthHash = p.getHash(reader)
+		if len(p.PeFile.AuthInfoGo.Buffer) > 1 {
+			p.PeFile.AuthHash = p.getHash(reader)
+		}
 
 		return nil // Success
 	}
