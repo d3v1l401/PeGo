@@ -2,6 +2,5 @@
 debug
 *_out.exe
 VirusShare*
-OrdMap.json
 .\winout\*
 win.ini
