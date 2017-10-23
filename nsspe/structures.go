@@ -89,6 +89,9 @@ type PE struct {
 	ImportedAPI map[string][]ImportEntry
 	ExportedAPI []ExportEntry
 
+	ImpHash string
+	ImpDeep string
+
 	ExpLeaks ExportsInfo
 
 	AuthInfo   AuthentInfo `json:"-"`
@@ -102,7 +105,6 @@ type PE struct {
 	OriginalName string
 
 	Indicators   *DllSecCharacteristics
-	ImpHash      string
 	Packer       *PackerInfo
 	Miscellanous *Signatures
 

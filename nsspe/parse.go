@@ -634,13 +634,18 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 									//fmt.Printf("Imported API: encrypted -> %s...[+%d more]\n", name[:350], len(name)-350)
 								}
 
-								if len(impdname) > 1 && len(name) > 0 && ordinal > 0 && len(name) < 350 {
-									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
-									enabledImphash = true
-								} else if len(impdname) > 1 && len(name) == 0 && ordinal > 0 && ordinal < 1000 {
-									imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), p.ResolveOrdinal(int(ordinal), impdname)))
-									enabledImphash = true
+								if p.ordMap != nil {
+									if len(impdname) > 1 && len(name) > 0 && ordinal > 0 && len(name) < 350 {
+										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), strings.ToLower(name)))
+										enabledImphash = true
+									} else if len(impdname) > 1 && len(name) == 0 && ordinal > 0 && ordinal < 1000 {
+										imphashparts = append(imphashparts, fmt.Sprintf("%s.%s", strings.ToLower(impdname[:len(impdname)-4]), p.ResolveOrdinal(int(ordinal), impdname)))
+										enabledImphash = true
+									} else {
+										enabledImphash = false
+									}
 								} else {
+									// Ordinal map is not imported, so Imphash cannot work.
 									enabledImphash = false
 								}
 
@@ -651,6 +656,8 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 							h.Write([]byte(strings.Join(imphashparts, ",")))
 							hash := h.Sum(nil)
 							p.PeFile.ImpHash = string(hex.EncodeToString(hash))
+
+							p.PeFile.ImpDeep = string(spamsum.HashBytes([]byte(strings.Join(imphashparts, ","))).String())
 						} else {
 							p.PeFile.ImpHash = "null"
 						}
