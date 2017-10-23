@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -457,9 +456,10 @@ func (p *Parsed) parseDIRS(reader *bytes.Reader) error {
 								Entry.Name = readZeroTerminatedString(off)
 								lastNameSize = len(Entry.Name)
 
-								fmt.Println(Entry)
+								p.PeFile.ExportedAPI = append(p.PeFile.ExportedAPI, Entry)
 							}
 
+							entry = exportsHeader
 						} else {
 							p.PeFile.Sabotages.DirectoryEvasion = true
 						}
