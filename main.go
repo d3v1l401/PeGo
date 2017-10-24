@@ -47,9 +47,9 @@ func main() {
 	var scanType string
 	var outPath string
 	var ordMap string
-	flag.StringVar(&filename, "file", "ImpHashExe.exe", "Process this file.")
+	flag.StringVar(&filename, "file", ".\\tests\\ImpHashExe.exe", "Process this file.")
 	flag.StringVar(&path, "path", "", "Path to start scanning files for PE parsing.")
-	flag.StringVar(&signaturePath, "signdb", "userdb.txt", "Path to the PEiD signature database.")
+	flag.StringVar(&signaturePath, "signdb", ".\\data\\userdb.txt", "Path to the PEiD signature database.")
 	flag.StringVar(&scanType, "signature", "eponly", "no, full or eponly signature scanning enable.")
 	flag.StringVar(&outPath, "outpath", "", "Output path for reports.")
 	flag.StringVar(&ordMap, "ordmap", "", "If ordinal mapping is present, specify path.")

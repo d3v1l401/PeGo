@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 
@@ -998,10 +999,31 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 			p.PeFile.AuthHash = p.getHash(reader)
 		}
 
+		p.PluginExecute(".\\plugins")
+
 		return nil // Success
 	}
 
 	return errors.New("No buffer parsed.")
+}
+
+func (p *Parsed) PluginExecute(path string) error {
+
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, f := range files {
+		symTable, err := LoadPlugin(f.Name())
+		if err != nil {
+			return err
+		}
+
+		p.PeFile.PluginsResults[path] = symTable.ProcessSections(p.PeFile.Sections)
+	}
+
+	return nil
 }
 
 func (p *Parsed) LoadWithSignatures(path, scantype, dbfile string) error {

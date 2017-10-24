@@ -104,9 +104,10 @@ type PE struct {
 	InternalName string
 	OriginalName string
 
-	Indicators   *DllSecCharacteristics
-	Packer       *PackerInfo
-	Miscellanous *Signatures
+	Indicators     *DllSecCharacteristics
+	Packer         *PackerInfo
+	Miscellanous   *Signatures
+	PluginsResults map[string]string
 
 	Sabotages SabotageFlags
 }
