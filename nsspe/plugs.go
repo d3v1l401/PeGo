@@ -1,26 +1,13 @@
 package nsspe
 
-import (
-	"plugin"
-)
-
-type IPlugBase interface {
-	ProcessSections(sections []SectionHeader) string
+type Result struct {
+	Whatever string
 }
 
-func LoadPlugin(path string) (IPlugBase, error) {
-	plug, err := plugin.Open(path)
-	if err != nil {
-		return nil, err
-	}
+type PlugInFunc func(*PE) []Result
 
-	sym, err := plug.Lookup("ProcessSections")
-	if err != nil {
-		return nil, err
-	}
+var plugins []PlugInFunc
 
-	var symbols IPlugBase
-	symbols = sym.(IPlugBase)
-
-	return symbols, nil
+func AddPlugin(f PlugInFunc) {
+	plugins = append(plugins, f)
 }
