@@ -26,7 +26,7 @@ func GolangID(pe *PE) []Result {
 	HadErrorConversion := false
 	ResultingArray := ""
 	if len(pe.Sections) > 0 {
-		for i, s := range pe.Sections {
+		for _, s := range pe.Sections {
 			if strings.HasPrefix(s.Name, "/") {
 				num, err := strconv.Atoi(s.Name[1:len(s.Name)])
 				if err != nil {
@@ -50,7 +50,7 @@ func GolangID(pe *PE) []Result {
 			}
 		}
 
-		return ResultingArray
+		return nil // TO FIX
 	}
-	return "No sections"
+	return nil // TO FIX
 }

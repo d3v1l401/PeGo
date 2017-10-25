@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 
@@ -1000,8 +999,8 @@ func (p *Parsed) Parse(buffer []byte, scantype string, dbpath string) error {
 		}
 
 		for _, plugin := range plugins {
-			result := plugin()
-			...
+			_ = plugin(p.PeFile) // TODO
+
 		}
 
 		return nil // Success
